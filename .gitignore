@@ -39,3 +39,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# nicodetta-specific
+/tmp/
+nicodetta.db-journal
+nicodetta.db-shm
+nicodetta.db-wal
+.env.local
+.env*.local
+.vercel
