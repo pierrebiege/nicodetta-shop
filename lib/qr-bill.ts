@@ -54,27 +54,29 @@ export async function generateQRBillPdf(data: QRBillData): Promise<Buffer> {
     rows: [
       {
         height: 24,
-        fillColor: '#0A0A0A',
+        backgroundColor: '#0A0A0A',
+        fontName: 'Helvetica-Bold',
         columns: [
-          { text: 'Werk', width: 320, color: '#FFFFFF', font: 'Helvetica-Bold' },
-          { text: 'Betrag', width: 175, color: '#FFFFFF', font: 'Helvetica-Bold' },
+          { text: 'Werk', width: 320 },
+          { text: 'Betrag', width: 175 },
         ],
       },
       {
         height: 28,
+        fontName: 'Helvetica',
         columns: [
-          { text: data.productTitle, width: 320, font: 'Helvetica' },
-          { text: `CHF ${(data.amountRappen / 100).toFixed(2)}`, width: 175, font: 'Helvetica' },
+          { text: data.productTitle, width: 320 },
+          { text: `CHF ${(data.amountRappen / 100).toFixed(2)}`, width: 175 },
         ],
       },
       {
         height: 28,
+        fontName: 'Helvetica-Bold',
         columns: [
-          { text: 'Total', width: 320, font: 'Helvetica-Bold' },
+          { text: 'Total', width: 320 },
           {
             text: `CHF ${(data.amountRappen / 100).toFixed(2)}`,
             width: 175,
-            font: 'Helvetica-Bold',
           },
         ],
       },
