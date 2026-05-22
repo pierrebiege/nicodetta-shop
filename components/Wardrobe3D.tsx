@@ -7,18 +7,19 @@ import * as THREE from 'three';
 import type { Product } from '@/db/schema';
 import { formatCHF } from '@/lib/format';
 
-// Room dimensions in metres
-const ROOM_W = 24;
-const ROOM_D = 16;
-const ROOM_H = 6.0; // doubled — feels open, not oppressive
+// Long narrow boutique room
+const ROOM_W = 8;  // x (left-right) — narrow corridor
+const ROOM_D = 22; // z (length you walk down)
+const ROOM_H = 6.0;
 const EYE = 1.65;
-const WALL_INSET = 0.6;
+const WALL_INSET = 0.5;
 const SPEED = 5.0;
-const PAINTING_CENTER_Y = 1.55; // body height — eye level for paintings
-const PAINTING_DEFAULT_W = 0.8;
-const PAINTING_DEFAULT_H = 1.0;
 
-// Panel sizes for the textured walls/floor — bigger panels = fewer lines
+const RAIL_HEIGHT = 2.4;
+const RAIL_X_OFFSET = 2.2; // each rail this far from centre line
+const ITEM_CENTER_Y = 1.3; // garments hang at body height
+const HANGER_Y = 2.1;
+
 const WALL_PANEL_M = 2.6;
 const FLOOR_TILE_M = 1.5;
 
@@ -29,7 +30,7 @@ type TouchRefs = {
   lookY: { current: number };
 };
 
-export function Museum3D({ paintings }: { paintings: Product[] }) {
+export function Wardrobe3D({ items }: { items: Product[] }) {
   const [entered, setEntered] = useState(false);
   const [hovered, setHovered] = useState<Product | null>(null);
   const [isTouch, setIsTouch] = useState(false);
@@ -37,12 +38,7 @@ export function Museum3D({ paintings }: { paintings: Product[] }) {
   const controlsRef = useRef<any>(null);
 
   const touchRefs: TouchRefs = useMemo(
-    () => ({
-      moveX: { current: 0 },
-      moveY: { current: 0 },
-      lookX: { current: 0 },
-      lookY: { current: 0 },
-    }),
+    () => ({ moveX: { current: 0 }, moveY: { current: 0 }, lookX: { current: 0 }, lookY: { current: 0 } }),
     [],
   );
 
@@ -52,7 +48,6 @@ export function Museum3D({ paintings }: { paintings: Product[] }) {
     }
   }, []);
 
-  // Hide tutorial overlay after movement starts
   useEffect(() => {
     if (!entered) return;
     function onMove(e: KeyboardEvent) {
@@ -70,18 +65,12 @@ export function Museum3D({ paintings }: { paintings: Product[] }) {
 
   function enter() {
     setShowTutorial(true);
-    if (isTouch) {
-      setEntered(true);
-    } else {
-      controlsRef.current?.lock();
-    }
+    if (isTouch) setEntered(true);
+    else controlsRef.current?.lock();
   }
   function exit() {
-    if (isTouch) {
-      setEntered(false);
-    } else {
-      controlsRef.current?.unlock();
-    }
+    if (isTouch) setEntered(false);
+    else controlsRef.current?.unlock();
   }
 
   return (
@@ -93,28 +82,17 @@ export function Museum3D({ paintings }: { paintings: Product[] }) {
         dpr={[1, 2]}
       >
         <color attach="background" args={['#e8ebee']} />
-        <fog attach="fog" args={['#e8ebee', 16, 40]} />
+        <fog attach="fog" args={['#e8ebee', 16, 38]} />
 
-        {/* Very bright, neutral lighting for the clean Portal/Mirror's Edge feel */}
         <ambientLight intensity={1.0} color="#ffffff" />
         <hemisphereLight args={['#ffffff', '#cfd3d8', 0.9]} />
-        <directionalLight
-          position={[6, 8, 4]}
-          intensity={0.6}
-          color="#ffffff"
-          castShadow
-          shadow-mapSize-width={1024}
-          shadow-mapSize-height={1024}
-        />
+        <directionalLight position={[3, 8, 6]} intensity={0.6} color="#ffffff" castShadow />
 
         <Suspense fallback={null}>
           <Room />
-          <Paintings paintings={paintings} hovered={hovered} onHover={setHovered} />
-          <Movement
-            entered={entered}
-            isTouch={isTouch}
-            touchRefs={touchRefs}
-          />
+          <Rails />
+          <Items items={items} hovered={hovered} onHover={setHovered} />
+          <Movement entered={entered} isTouch={isTouch} touchRefs={touchRefs} />
         </Suspense>
 
         {!isTouch && (
@@ -126,7 +104,6 @@ export function Museum3D({ paintings }: { paintings: Product[] }) {
         )}
       </Canvas>
 
-      {/* Crosshair (desktop only) — grows + labels when on a painting */}
       {entered && !isTouch && (
         <div className="pointer-events-none fixed inset-0 z-30 flex items-center justify-center">
           {hovered ? (
@@ -142,80 +119,66 @@ export function Museum3D({ paintings }: { paintings: Product[] }) {
         </div>
       )}
 
-      {/* Touch hover label */}
       {entered && isTouch && hovered && (
         <div className="pointer-events-none fixed bottom-44 left-1/2 -translate-x-1/2 z-30 text-center px-6">
           <div className="bg-black/80 text-white px-4 py-3">
-            <div className="font-display font-black uppercase text-lg tracking-tight">
-              {hovered.title}
-            </div>
-            <div className="text-[10px] uppercase tracking-widest opacity-90 mt-1">
-              Tap to open
-            </div>
+            <div className="font-display uppercase text-lg tracking-tight">{hovered.title}</div>
+            <div className="text-[10px] uppercase tracking-widest opacity-90 mt-1">Tap to open</div>
           </div>
         </div>
       )}
 
-      {/* Desktop info bar at bottom when hovering */}
       {entered && !isTouch && hovered && (
         <div className="pointer-events-none fixed bottom-8 left-1/2 -translate-x-1/2 z-30 text-center px-6">
           <div className="bg-black/80 text-white px-5 py-3">
-            <div className="font-display font-black uppercase text-xl tracking-tight">
-              {hovered.title}
-            </div>
+            <div className="font-display uppercase text-xl tracking-tight">{hovered.title}</div>
             <div className="text-[10px] uppercase tracking-widest opacity-90 mt-1">
-              {hovered.year} {hovered.technique ? `· ${hovered.technique}` : ''}
-              {hovered.width && hovered.height
-                ? ` · ${hovered.width}×${hovered.height} cm`
-                : ''}{' '}
-              · {formatCHF(hovered.priceRappen)}
+              {hovered.year} {hovered.technique ? `· ${hovered.technique}` : ''} ·{' '}
+              {formatCHF(hovered.priceRappen)}
             </div>
           </div>
         </div>
       )}
 
-      {/* Entry overlay */}
       {!entered && (
         <button
           onClick={enter}
           className="fixed inset-0 z-20 flex flex-col items-center justify-center bg-black/80 text-white backdrop-blur-sm cursor-pointer px-6"
         >
-          <div className="font-display font-black uppercase text-[clamp(3rem,8vw,7rem)] leading-[0.85] tracking-tight">
-            Enter
+          <div className="font-serif font-medium uppercase text-[clamp(3rem,8vw,7rem)] leading-[0.85] tracking-tight">
+            Wardrobe
           </div>
 
           <div className="mt-12 max-w-2xl">
             {isTouch ? (
               <div className="space-y-6 text-center">
-                <ControlsRow
-                  icon={<JoyIcon />}
-                  label="Move"
-                  detail="Joystick bottom-left"
-                />
-                <ControlsRow
-                  icon={<DragIcon />}
-                  label="Look"
-                  detail="Drag the right side"
-                />
-                <ControlsRow icon={<TapIcon />} label="Open" detail="Tap any work" />
+                <Row label="Move" detail="Joystick bottom-left">
+                  <div className="w-12 h-12 border-2 border-white rounded-full flex items-center justify-center">
+                    <div className="w-4 h-4 bg-white rounded-full" />
+                  </div>
+                </Row>
+                <Row label="Look" detail="Drag the right side">
+                  <div className="w-12 h-12 border-2 border-white flex items-center justify-center text-xl">↔</div>
+                </Row>
+                <Row label="Open" detail="Tap any piece">
+                  <div className="w-12 h-12 border-2 border-white flex items-center justify-center text-xl">◉</div>
+                </Row>
               </div>
             ) : (
               <div className="space-y-6">
                 <div className="flex items-center justify-center gap-8">
-                  <KeyboardGraphic />
+                  <KbdGroup />
                   <div className="text-left">
-                    <div className="font-display font-black uppercase text-2xl">Move</div>
-                    <div className="text-xs uppercase tracking-widest opacity-70 mt-1">
-                      WASD or arrow keys
-                    </div>
+                    <div className="font-display uppercase text-2xl">Move</div>
+                    <div className="text-xs uppercase tracking-widest opacity-70 mt-1">WASD or arrow keys</div>
                   </div>
                 </div>
                 <div className="flex items-center justify-center gap-8">
-                  <MouseGraphic />
+                  <MouseG />
                   <div className="text-left">
-                    <div className="font-display font-black uppercase text-2xl">Look + click</div>
+                    <div className="font-display uppercase text-2xl">Look + click</div>
                     <div className="text-xs uppercase tracking-widest opacity-70 mt-1">
-                      Move mouse · Click any work to open · ESC to leave
+                      Move mouse · Click any piece to open · ESC to leave
                     </div>
                   </div>
                 </div>
@@ -223,32 +186,30 @@ export function Museum3D({ paintings }: { paintings: Product[] }) {
             )}
           </div>
 
-          <div className="mt-12 font-display font-black uppercase text-base tracking-widest border border-white px-6 py-3">
+          <div className="mt-12 font-display uppercase text-base tracking-widest border border-white px-6 py-3">
             {isTouch ? 'Tap to start' : 'Click to start'}
           </div>
         </button>
       )}
 
-      {/* In-room tutorial overlay (fades out after movement / 6 s) */}
       {entered && showTutorial && !isTouch && (
         <div className="pointer-events-none fixed bottom-32 left-1/2 -translate-x-1/2 z-30 text-white text-center animate-pulse">
           <div className="bg-black/70 px-6 py-4 flex items-center gap-6">
-            <KeyboardGraphic small />
+            <KbdGroup small />
             <div className="text-left">
-              <div className="font-display font-black uppercase text-base">Move</div>
+              <div className="font-display uppercase text-base">Move</div>
               <div className="text-[10px] uppercase tracking-widest opacity-70">WASD · Arrows</div>
             </div>
             <div className="w-px h-10 bg-white/30" />
-            <MouseGraphic small />
+            <MouseG small />
             <div className="text-left">
-              <div className="font-display font-black uppercase text-base">Look</div>
+              <div className="font-display uppercase text-base">Look</div>
               <div className="text-[10px] uppercase tracking-widest opacity-70">Move mouse</div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Mobile exit */}
       {entered && isTouch && (
         <button
           onClick={exit}
@@ -259,10 +220,8 @@ export function Museum3D({ paintings }: { paintings: Product[] }) {
         </button>
       )}
 
-      {/* Mobile touch controls */}
-      {entered && isTouch && <TouchControlsUI touchRefs={touchRefs} />}
+      {entered && isTouch && <TouchUI touchRefs={touchRefs} />}
 
-      {/* Persistent desktop corner hint */}
       {entered && !isTouch && (
         <div className="pointer-events-none fixed top-5 left-6 z-30 text-ink text-[10px] uppercase tracking-widest opacity-70 bg-white/70 px-3 py-2 backdrop-blur-sm">
           WASD = Move · Mouse = Look · ESC = Leave
@@ -272,81 +231,40 @@ export function Museum3D({ paintings }: { paintings: Product[] }) {
   );
 }
 
-// ─── Visual control hints ──────────────────────────────────────────────────
+// ─── Visual ────────────────────────────────────────────────────────────────
 
-function KeyboardGraphic({ small = false }: { small?: boolean }) {
+function KbdGroup({ small = false }: { small?: boolean }) {
   const size = small ? 'w-7 h-7 text-[11px]' : 'w-11 h-11 text-base';
   return (
     <div className={`grid gap-1 ${small ? 'scale-90' : ''}`} style={{ gridTemplateColumns: 'repeat(3, auto)' }}>
-      <div />
-      <Key size={size}>W</Key>
-      <div />
-      <Key size={size}>A</Key>
-      <Key size={size}>S</Key>
-      <Key size={size}>D</Key>
+      <div /><Kbd size={size}>W</Kbd><div />
+      <Kbd size={size}>A</Kbd><Kbd size={size}>S</Kbd><Kbd size={size}>D</Kbd>
     </div>
   );
 }
-
-function Key({ children, size }: { children: React.ReactNode; size: string }) {
+function Kbd({ children, size }: { children: React.ReactNode; size: string }) {
   return (
-    <div
-      className={`${size} flex items-center justify-center border-2 border-white text-white font-display font-black uppercase`}
-    >
+    <div className={`${size} flex items-center justify-center border-2 border-white text-white font-display uppercase`}>
       {children}
     </div>
   );
 }
-
-function MouseGraphic({ small = false }: { small?: boolean }) {
+function MouseG({ small = false }: { small?: boolean }) {
   const dim = small ? 'w-7 h-10' : 'w-10 h-14';
   return (
     <div className="relative">
       <div className={`${dim} border-2 border-white relative`} style={{ borderRadius: '50% / 30%' }}>
         <div className="absolute top-1.5 left-1/2 -translate-x-1/2 w-1 h-2 bg-white" />
       </div>
-      <div className="absolute -top-2 -left-3 text-white text-xs">↖</div>
-      <div className="absolute -top-2 -right-3 text-white text-xs">↗</div>
     </div>
   );
 }
-
-function JoyIcon() {
-  return (
-    <div className="w-12 h-12 border-2 border-white rounded-full relative flex items-center justify-center">
-      <div className="w-4 h-4 bg-white rounded-full" />
-    </div>
-  );
-}
-function DragIcon() {
-  return (
-    <div className="w-12 h-12 border-2 border-white flex items-center justify-center text-white text-xl">
-      ↔
-    </div>
-  );
-}
-function TapIcon() {
-  return (
-    <div className="w-12 h-12 border-2 border-white flex items-center justify-center text-white text-xl">
-      ◉
-    </div>
-  );
-}
-
-function ControlsRow({
-  icon,
-  label,
-  detail,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  detail: string;
-}) {
+function Row({ children, label, detail }: { children: React.ReactNode; label: string; detail: string }) {
   return (
     <div className="flex items-center justify-center gap-6">
-      {icon}
+      {children}
       <div className="text-left">
-        <div className="font-display font-black uppercase text-xl">{label}</div>
+        <div className="font-display uppercase text-xl">{label}</div>
         <div className="text-[10px] uppercase tracking-widest opacity-70 mt-1">{detail}</div>
       </div>
     </div>
@@ -362,7 +280,6 @@ function Room() {
 
   return (
     <group>
-      {/* Floor */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[ROOM_W, ROOM_D]} />
         <meshStandardMaterial
@@ -373,7 +290,6 @@ function Room() {
         />
       </mesh>
 
-      {/* Ceiling */}
       <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, ROOM_H, 0]}>
         <planeGeometry args={[ROOM_W, ROOM_D]} />
         <meshStandardMaterial
@@ -388,66 +304,43 @@ function Room() {
       <Wall w={ROOM_D} h={ROOM_H} position={[-ROOM_W / 2, ROOM_H / 2, 0]} rotation={[0, Math.PI / 2, 0]} tex={wallTex} />
       <Wall w={ROOM_D} h={ROOM_H} position={[ROOM_W / 2, ROOM_H / 2, 0]} rotation={[0, -Math.PI / 2, 0]} tex={wallTex} />
 
-      {/* LED edge strips along ceiling */}
+      {/* LED strips along ceiling */}
       <LedStrip from={[-ROOM_W / 2, ROOM_H - 0.03, -ROOM_D / 2 + 0.02]} to={[ROOM_W / 2, ROOM_H - 0.03, -ROOM_D / 2 + 0.02]} />
       <LedStrip from={[-ROOM_W / 2, ROOM_H - 0.03, ROOM_D / 2 - 0.02]} to={[ROOM_W / 2, ROOM_H - 0.03, ROOM_D / 2 - 0.02]} />
       <LedStrip from={[-ROOM_W / 2 + 0.02, ROOM_H - 0.03, -ROOM_D / 2]} to={[-ROOM_W / 2 + 0.02, ROOM_H - 0.03, ROOM_D / 2]} />
       <LedStrip from={[ROOM_W / 2 - 0.02, ROOM_H - 0.03, -ROOM_D / 2]} to={[ROOM_W / 2 - 0.02, ROOM_H - 0.03, ROOM_D / 2]} />
 
-      {/* Floor LED strips (cool blue accent) */}
+      {/* LED accents along floor */}
       <LedStrip from={[-ROOM_W / 2, 0.03, -ROOM_D / 2 + 0.02]} to={[ROOM_W / 2, 0.03, -ROOM_D / 2 + 0.02]} accent />
       <LedStrip from={[-ROOM_W / 2, 0.03, ROOM_D / 2 - 0.02]} to={[ROOM_W / 2, 0.03, ROOM_D / 2 - 0.02]} accent />
       <LedStrip from={[-ROOM_W / 2 + 0.02, 0.03, -ROOM_D / 2]} to={[-ROOM_W / 2 + 0.02, 0.03, ROOM_D / 2]} accent />
       <LedStrip from={[ROOM_W / 2 - 0.02, 0.03, -ROOM_D / 2]} to={[ROOM_W / 2 - 0.02, 0.03, ROOM_D / 2]} accent />
 
-      {/* Bright ceiling fills */}
-      <pointLight position={[-ROOM_W / 4, ROOM_H - 0.3, -ROOM_D / 4]} intensity={0.6} distance={11} color="#ffffff" />
-      <pointLight position={[ROOM_W / 4, ROOM_H - 0.3, -ROOM_D / 4]} intensity={0.6} distance={11} color="#ffffff" />
-      <pointLight position={[-ROOM_W / 4, ROOM_H - 0.3, ROOM_D / 4]} intensity={0.6} distance={11} color="#ffffff" />
-      <pointLight position={[ROOM_W / 4, ROOM_H - 0.3, ROOM_D / 4]} intensity={0.6} distance={11} color="#ffffff" />
+      {/* Spaced ceiling fill lights down the corridor */}
+      {[-7, -2, 3, 8].map((z) => (
+        <pointLight key={z} position={[0, ROOM_H - 0.3, z]} intensity={0.55} distance={9} color="#ffffff" />
+      ))}
     </group>
   );
 }
 
 function Wall({
-  w,
-  h,
-  position,
-  rotation,
-  tex,
+  w, h, position, rotation, tex,
 }: {
-  w: number;
-  h: number;
-  position: [number, number, number];
-  rotation: [number, number, number];
-  tex: THREE.Texture;
+  w: number; h: number; position: [number, number, number]; rotation: [number, number, number]; tex: THREE.Texture;
 }) {
-  const mapped = useMemo(
-    () => cloneRepeat(tex, w / WALL_PANEL_M, h / WALL_PANEL_M),
-    [tex, w, h],
-  );
+  const mapped = useMemo(() => cloneRepeat(tex, w / WALL_PANEL_M, h / WALL_PANEL_M), [tex, w, h]);
   return (
     <mesh position={position} rotation={rotation} receiveShadow>
       <planeGeometry args={[w, h]} />
-      <meshStandardMaterial
-        map={mapped}
-        color="#ffffff"
-        roughness={0.9}
-        side={THREE.FrontSide}
-      />
+      <meshStandardMaterial map={mapped} color="#ffffff" roughness={0.9} side={THREE.FrontSide} />
     </mesh>
   );
 }
 
 function LedStrip({
-  from,
-  to,
-  accent = false,
-}: {
-  from: [number, number, number];
-  to: [number, number, number];
-  accent?: boolean;
-}) {
+  from, to, accent = false,
+}: { from: [number, number, number]; to: [number, number, number]; accent?: boolean }) {
   const start = new THREE.Vector3(...from);
   const end = new THREE.Vector3(...to);
   const length = start.distanceTo(end);
@@ -462,22 +355,48 @@ function LedStrip({
   );
 }
 
-// ─── Paintings ─────────────────────────────────────────────────────────────
+// Two long chrome rails running the length of the corridor
+function Rails() {
+  const railLen = ROOM_D - 2;
+  return (
+    <group>
+      {/* Left rail */}
+      <mesh position={[-RAIL_X_OFFSET, RAIL_HEIGHT, 0]} rotation={[Math.PI / 2, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.025, 0.025, railLen, 16]} />
+        <meshStandardMaterial color="#b0b6bc" metalness={0.9} roughness={0.3} />
+      </mesh>
+      {/* Right rail */}
+      <mesh position={[RAIL_X_OFFSET, RAIL_HEIGHT, 0]} rotation={[Math.PI / 2, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.025, 0.025, railLen, 16]} />
+        <meshStandardMaterial color="#b0b6bc" metalness={0.9} roughness={0.3} />
+      </mesh>
+      {/* End-cap supports */}
+      {[-railLen / 2, railLen / 2].map((z) => (
+        <group key={z}>
+          <mesh position={[-RAIL_X_OFFSET, RAIL_HEIGHT + 0.5, z]}>
+            <cylinderGeometry args={[0.02, 0.02, 1.1, 12]} />
+            <meshStandardMaterial color="#b0b6bc" metalness={0.9} roughness={0.3} />
+          </mesh>
+          <mesh position={[RAIL_X_OFFSET, RAIL_HEIGHT + 0.5, z]}>
+            <cylinderGeometry args={[0.02, 0.02, 1.1, 12]} />
+            <meshStandardMaterial color="#b0b6bc" metalness={0.9} roughness={0.3} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
 
-function Paintings({
-  paintings,
-  hovered,
-  onHover,
-}: {
-  paintings: Product[];
-  hovered: Product | null;
-  onHover: (p: Product | null) => void;
-}) {
-  const slots = useMemo(() => buildSlots(paintings.length), [paintings.length]);
+// ─── Items hanging from rails ──────────────────────────────────────────────
+
+function Items({
+  items, hovered, onHover,
+}: { items: Product[]; hovered: Product | null; onHover: (p: Product | null) => void }) {
+  const slots = useMemo(() => buildHangingSlots(items.length), [items.length]);
   return (
     <>
-      {paintings.map((p, i) => (
-        <Painting
+      {items.map((p, i) => (
+        <HangingItem
           key={p.id}
           product={p}
           slot={slots[i % slots.length]}
@@ -494,83 +413,72 @@ type Slot = {
   rotation: [number, number, number];
 };
 
-function buildSlots(count: number): Slot[] {
+function buildHangingSlots(count: number): Slot[] {
   const slots: Slot[] = [];
-  const offWall = 0.02;
-  const back = 4, front = 4, left = 2, right = 2;
-  for (let i = 0; i < back; i++) {
+  const per = Math.ceil(count / 2); // items per rail
+  // Distribute Z evenly along the rail
+  const railLen = ROOM_D - 3;
+  for (let i = 0; i < per; i++) {
+    const z = ((i + 0.5) / per - 0.5) * railLen;
+    // Left rail: faces +x (into the aisle)
     slots.push({
-      position: [((i + 0.5) / back - 0.5) * (ROOM_W - 1.5), PAINTING_CENTER_Y, -ROOM_D / 2 + offWall],
-      rotation: [0, 0, 0],
-    });
-  }
-  for (let i = 0; i < front; i++) {
-    slots.push({
-      position: [((i + 0.5) / front - 0.5) * (ROOM_W - 1.5), PAINTING_CENTER_Y, ROOM_D / 2 - offWall],
-      rotation: [0, Math.PI, 0],
-    });
-  }
-  for (let i = 0; i < left; i++) {
-    slots.push({
-      position: [-ROOM_W / 2 + offWall, PAINTING_CENTER_Y, ((i + 0.5) / left - 0.5) * (ROOM_D - 1.5)],
+      position: [-RAIL_X_OFFSET + 0.1, ITEM_CENTER_Y, z],
       rotation: [0, Math.PI / 2, 0],
     });
   }
-  for (let i = 0; i < right; i++) {
+  for (let i = 0; i < per; i++) {
+    const z = ((i + 0.5) / per - 0.5) * railLen;
+    // Right rail: faces -x
     slots.push({
-      position: [ROOM_W / 2 - offWall, PAINTING_CENTER_Y, ((i + 0.5) / right - 0.5) * (ROOM_D - 1.5)],
+      position: [RAIL_X_OFFSET - 0.1, ITEM_CENTER_Y, z],
       rotation: [0, -Math.PI / 2, 0],
     });
   }
   return slots.slice(0, count);
 }
 
-function Painting({
-  product,
-  slot,
-  isHovered,
-  onHover,
-}: {
-  product: Product;
-  slot: Slot;
-  isHovered: boolean;
-  onHover: (p: Product | null) => void;
-}) {
+function HangingItem({
+  product, slot, isHovered, onHover,
+}: { product: Product; slot: Slot; isHovered: boolean; onHover: (p: Product | null) => void }) {
   const router = useRouter();
   const texture = useLoader(THREE.TextureLoader, product.imagePath);
   const groupRef = useRef<THREE.Group>(null);
 
-  const w =
-    product.width && product.height ? product.width / 100 : PAINTING_DEFAULT_W;
-  const h =
-    product.width && product.height ? product.height / 100 : PAINTING_DEFAULT_H;
+  // Garments: roughly 80cm wide, 110cm tall
+  const w = 0.8;
+  const h = 1.1;
 
-  // Animate slight forward push + scale on hover
-  useFrame(() => {
+  useFrame((_, delta) => {
     if (!groupRef.current) return;
-    const target = isHovered ? 1.04 : 1.0;
+    const target = isHovered ? 1.06 : 1.0;
     groupRef.current.scale.x += (target - groupRef.current.scale.x) * 0.15;
     groupRef.current.scale.y += (target - groupRef.current.scale.y) * 0.15;
+
+    // Gentle sway
+    const t = performance.now() * 0.0007 + slot.position[2];
+    groupRef.current.rotation.z = Math.sin(t) * 0.02;
   });
 
   return (
     <group ref={groupRef} position={slot.position} rotation={slot.rotation}>
-      {/* Glow ring (visible when hovered) */}
+      {/* Hanger hook + bar */}
+      <mesh position={[0, HANGER_Y - ITEM_CENTER_Y, 0]}>
+        <torusGeometry args={[0.04, 0.006, 8, 16, Math.PI]} />
+        <meshStandardMaterial color="#b0b6bc" metalness={0.9} roughness={0.3} />
+      </mesh>
+      {/* Hanger triangle (simple cone/horizontal bar) */}
+      <mesh position={[0, HANGER_Y - ITEM_CENTER_Y - 0.12, 0]}>
+        <boxGeometry args={[w * 0.55, 0.015, 0.04]} />
+        <meshStandardMaterial color="#0a0a0a" roughness={0.7} />
+      </mesh>
+
+      {/* Hover glow */}
       <mesh position={[0, 0, -0.008]}>
-        <planeGeometry args={[w + 0.12, h + 0.12]} />
-        <meshBasicMaterial
-          color={isHovered ? '#ffffff' : '#dde2e6'}
-          transparent
-          opacity={isHovered ? 1 : 0.0}
-          toneMapped={false}
-        />
+        <planeGeometry args={[w + 0.16, h + 0.16]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={isHovered ? 1 : 0} toneMapped={false} />
       </mesh>
-      {/* Subtle dark mat (always visible) */}
-      <mesh position={[0, 0, -0.004]}>
-        <planeGeometry args={[w + 0.05, h + 0.05]} />
-        <meshBasicMaterial color="#0a0a0a" toneMapped={false} />
-      </mesh>
-      {/* Painting plane */}
+
+      {/* Item plane */}
       <mesh
         onClick={(e) => {
           e.stopPropagation();
@@ -587,25 +495,19 @@ function Painting({
         }}
       >
         <planeGeometry args={[w, h]} />
-        <meshBasicMaterial map={texture} toneMapped={false} />
+        <meshBasicMaterial map={texture} toneMapped={false} transparent />
       </mesh>
-      {/* Spotlight on painting */}
-      <pointLight position={[0, h / 2 + 0.25, 0.4]} intensity={0.4} distance={2.2} color="#fff5e8" />
+
+      <pointLight position={[0, h / 2 + 0.3, 0.4]} intensity={0.35} distance={1.8} color="#fff5e8" />
     </group>
   );
 }
 
-// ─── Movement & touch input ────────────────────────────────────────────────
+// ─── Movement & touch ──────────────────────────────────────────────────────
 
 function Movement({
-  entered,
-  isTouch,
-  touchRefs,
-}: {
-  entered: boolean;
-  isTouch: boolean;
-  touchRefs: TouchRefs;
-}) {
+  entered, isTouch, touchRefs,
+}: { entered: boolean; isTouch: boolean; touchRefs: TouchRefs }) {
   const { camera } = useThree();
   const keys = useRef<Record<string, boolean>>({});
   const velocity = useRef(new THREE.Vector3());
@@ -627,8 +529,6 @@ function Movement({
 
   useFrame((_, delta) => {
     if (!entered) return;
-
-    // Touch look
     if (isTouch && (touchRefs.lookX.current !== 0 || touchRefs.lookY.current !== 0)) {
       euler.current.setFromQuaternion(camera.quaternion);
       const s = 0.0028;
@@ -672,9 +572,7 @@ function Movement({
   return null;
 }
 
-// ─── Touch UI ──────────────────────────────────────────────────────────────
-
-function TouchControlsUI({ touchRefs }: { touchRefs: TouchRefs }) {
+function TouchUI({ touchRefs }: { touchRefs: TouchRefs }) {
   const joyRef = useRef<HTMLDivElement>(null);
   const knobRef = useRef<HTMLDivElement>(null);
   const lookRef = useRef<HTMLDivElement>(null);
@@ -693,7 +591,6 @@ function TouchControlsUI({ touchRefs }: { touchRefs: TouchRefs }) {
     function setKnob(dx: number, dy: number) {
       if (knobRef.current) knobRef.current.style.transform = `translate(${dx}px, ${dy}px)`;
     }
-
     function onTouchStart(e: TouchEvent) {
       for (const t of Array.from(e.changedTouches)) {
         const el = document.elementFromPoint(t.clientX, t.clientY);
@@ -711,13 +608,9 @@ function TouchControlsUI({ touchRefs }: { touchRefs: TouchRefs }) {
       for (const t of Array.from(e.changedTouches)) {
         if (t.identifier === moveTouchId.current) {
           const { cx, cy, r } = joyCenter();
-          let dx = t.clientX - cx;
-          let dy = t.clientY - cy;
+          let dx = t.clientX - cx; let dy = t.clientY - cy;
           const len = Math.hypot(dx, dy);
-          if (len > r) {
-            dx = (dx / len) * r;
-            dy = (dy / len) * r;
-          }
+          if (len > r) { dx = (dx / len) * r; dy = (dy / len) * r; }
           setKnob(dx, dy);
           touchRefs.moveX.current = dx / r;
           touchRefs.moveY.current = dy / r;
@@ -744,7 +637,6 @@ function TouchControlsUI({ touchRefs }: { touchRefs: TouchRefs }) {
         }
       }
     }
-
     window.addEventListener('touchstart', onTouchStart, { passive: false });
     window.addEventListener('touchmove', onTouchMove, { passive: false });
     window.addEventListener('touchend', onTouchEnd);
@@ -759,33 +651,19 @@ function TouchControlsUI({ touchRefs }: { touchRefs: TouchRefs }) {
 
   return (
     <>
-      <div
-        ref={lookRef}
-        className="fixed top-0 right-0 bottom-0 w-1/2 z-30 touch-none"
-        style={{ touchAction: 'none' }}
-      />
+      <div ref={lookRef} className="fixed top-0 right-0 bottom-0 w-1/2 z-30" style={{ touchAction: 'none' }} />
       <div
         ref={joyRef}
-        className="fixed bottom-8 left-8 z-40 w-32 h-32 bg-white/15 border-2 border-white/60 backdrop-blur-sm touch-none flex items-center justify-center"
+        className="fixed bottom-8 left-8 z-40 w-32 h-32 bg-white/15 border-2 border-white/60 backdrop-blur-sm flex items-center justify-center"
         style={{ touchAction: 'none', borderRadius: '50%' }}
       >
-        <div
-          ref={knobRef}
-          className="w-14 h-14 bg-white/80 pointer-events-none"
-          style={{ borderRadius: '50%' }}
-        />
-      </div>
-      <div className="pointer-events-none fixed bottom-44 left-8 z-40 text-white text-[10px] uppercase tracking-widest opacity-70 mix-blend-difference">
-        ← Move
-      </div>
-      <div className="pointer-events-none fixed top-1/2 right-8 z-40 text-white text-[10px] uppercase tracking-widest opacity-70 mix-blend-difference">
-        Drag → Look
+        <div ref={knobRef} className="w-14 h-14 bg-white/80 pointer-events-none" style={{ borderRadius: '50%' }} />
       </div>
     </>
   );
 }
 
-// ─── Procedural textures ───────────────────────────────────────────────────
+// ─── Textures ──────────────────────────────────────────────────────────────
 
 function makePanelTexture() {
   if (typeof document === 'undefined') return new THREE.Texture();
@@ -793,21 +671,17 @@ function makePanelTexture() {
   const cv = document.createElement('canvas');
   cv.width = cv.height = size;
   const ctx = cv.getContext('2d')!;
-  // Very light off-white concrete gradient
   const grad = ctx.createLinearGradient(0, 0, size, size);
   grad.addColorStop(0, '#f0f2f4');
   grad.addColorStop(1, '#e2e6ea');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, size, size);
-  // Single panel seam at edges (so each tile = one big panel)
   ctx.strokeStyle = '#b5bbc1';
   ctx.lineWidth = 4;
   ctx.strokeRect(0, 0, size, size);
-  // Inner thin highlight
   ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 1;
   ctx.strokeRect(3, 3, size - 6, size - 6);
-  // Very subtle concrete speckle
   for (let i = 0; i < 600; i++) {
     const a = (Math.random() * 0.04).toFixed(3);
     ctx.fillStyle = `rgba(140,150,160,${a})`;
@@ -824,17 +698,14 @@ function makeFloorTexture() {
   const cv = document.createElement('canvas');
   cv.width = cv.height = size;
   const ctx = cv.getContext('2d')!;
-  // Light polished concrete floor
   const grad = ctx.createRadialGradient(size / 2, size / 2, 30, size / 2, size / 2, size * 0.7);
   grad.addColorStop(0, '#c8cdd2');
   grad.addColorStop(1, '#a8aeb5');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, size, size);
-  // Tile seam
   ctx.strokeStyle = '#7a8088';
   ctx.lineWidth = 3;
   ctx.strokeRect(0, 0, size, size);
-  // Faint speckle
   for (let i = 0; i < 400; i++) {
     const a = (Math.random() * 0.06).toFixed(3);
     ctx.fillStyle = `rgba(60,65,70,${a})`;

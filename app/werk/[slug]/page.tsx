@@ -6,6 +6,7 @@ import { products } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { formatCHF } from '@/lib/format';
 import { BuyForm } from '@/components/BuyForm';
+import { findDemoProductBySlug } from '@/lib/demo-data';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,20 +14,29 @@ type Props = { params: Promise<{ slug: string }> };
 
 export default async function WorkDetail({ params }: Props) {
   const { slug } = await params;
-  const [product] = await db.select().from(products).where(eq(products.slug, slug));
+
+  // Try DB first, fall back to hardcoded demo catalog
+  let product = null;
+  try {
+    const [row] = await db.select().from(products).where(eq(products.slug, slug));
+    product = row ?? null;
+  } catch {
+    product = null;
+  }
+  if (!product) product = findDemoProductBySlug(slug);
   if (!product) notFound();
+
+  const back = product.type === 'clothing' ? '/wardrobe' : '/museum';
+  const backLabel = product.type === 'clothing' ? 'Wardrobe' : 'Gallery';
 
   return (
     <main className="min-h-screen">
       <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 md:px-10 py-5 mix-blend-difference text-white">
-        <Link href="/" className="font-display font-black text-xl uppercase">
+        <Link href="/" className="font-serif text-xl">
           Nicodetta
         </Link>
-        <Link
-          href="/"
-          className="text-xs uppercase tracking-widest font-medium"
-        >
-          ← Zurück
+        <Link href={back} className="text-xs uppercase tracking-widest font-medium">
+          ← {backLabel}
         </Link>
       </header>
 
@@ -47,10 +57,9 @@ export default async function WorkDetail({ params }: Props) {
         <aside className="col-span-12 md:col-span-4 p-6 md:p-10 md:pt-24 flex flex-col gap-8 border-l border-ink">
           <div>
             <p className="text-xs uppercase tracking-widest opacity-60">
-              {product.type === 'painting' ? 'Bild' : 'Kleidung'} ·{' '}
-              {product.year ?? '—'}
+              {product.type === 'painting' ? 'Painting' : 'Garment'} · {product.year ?? '—'}
             </p>
-            <h1 className="font-display font-black text-4xl md:text-5xl uppercase leading-none mt-2">
+            <h1 className="font-serif text-4xl md:text-5xl leading-[0.95] mt-2">
               {product.title}
             </h1>
           </div>
@@ -62,35 +71,29 @@ export default async function WorkDetail({ params }: Props) {
           <dl className="grid grid-cols-2 gap-y-2 text-xs uppercase tracking-widest border-t border-ink pt-4">
             {product.technique && (
               <>
-                <dt className="opacity-60">Technik</dt>
+                <dt className="opacity-60">Technique</dt>
                 <dd>{product.technique}</dd>
               </>
             )}
             {product.width && product.height && (
               <>
-                <dt className="opacity-60">Masse</dt>
-                <dd>
-                  {product.width} × {product.height} cm
-                </dd>
+                <dt className="opacity-60">Size</dt>
+                <dd>{product.width} × {product.height} cm</dd>
               </>
             )}
-            <dt className="opacity-60">Auflage</dt>
-            <dd>Unikat</dd>
+            <dt className="opacity-60">Edition</dt>
+            <dd>One of one</dd>
             <dt className="opacity-60">Status</dt>
             <dd className="font-bold">
-              {product.status === 'available' && 'Verfügbar'}
-              {product.status === 'reserved' && 'Reserviert'}
-              {product.status === 'sold' && 'Verkauft'}
+              {product.status === 'available' && 'Available'}
+              {product.status === 'reserved' && 'Reserved'}
+              {product.status === 'sold' && 'Sold'}
             </dd>
           </dl>
 
           <div className="flex items-baseline justify-between border-t border-ink pt-4">
-            <span className="text-xs uppercase tracking-widest opacity-60">
-              Preis
-            </span>
-            <span className="font-display font-black text-3xl">
-              {formatCHF(product.priceRappen)}
-            </span>
+            <span className="text-xs uppercase tracking-widest opacity-60">Price</span>
+            <span className="font-serif text-3xl">{formatCHF(product.priceRappen)}</span>
           </div>
 
           {product.status === 'available' ? (
@@ -98,8 +101,8 @@ export default async function WorkDetail({ params }: Props) {
           ) : (
             <div className="border border-ink p-4 text-sm">
               {product.status === 'sold'
-                ? 'Dieses Werk ist verkauft. Schreib mir, wenn du Interesse an etwas Ähnlichem hast.'
-                : 'Dieses Werk ist gerade reserviert. Schau später wieder rein.'}
+                ? 'This piece is sold. Reach out if you want something similar.'
+                : 'This piece is currently reserved. Check back later.'}
             </div>
           )}
         </aside>

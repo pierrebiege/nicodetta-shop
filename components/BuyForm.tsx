@@ -31,25 +31,25 @@ export function BuyForm({ productId }: { productId: number }) {
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      setError(body.error ?? 'Bestellung fehlgeschlagen');
+      setError(body.error ?? 'Order failed');
       setLoading(false);
       return;
     }
 
     const { reference } = await res.json();
-    router.push(`/danke?ref=${reference}`);
+    router.push(`/thanks?ref=${reference}`);
   }
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
       <Field name="name" label="Name" required />
-      <Field name="email" label="E-Mail" type="email" required />
-      <Field name="street" label="Strasse + Nr." required />
+      <Field name="email" label="Email" type="email" required />
+      <Field name="street" label="Street + No." required />
       <div className="grid grid-cols-3 gap-3">
-        <Field name="zip" label="PLZ" required className="col-span-1" />
-        <Field name="city" label="Ort" required className="col-span-2" />
+        <Field name="zip" label="Zip" required className="col-span-1" />
+        <Field name="city" label="City" required className="col-span-2" />
       </div>
-      <Field name="country" label="Land" defaultValue="CH" required />
+      <Field name="country" label="Country" defaultValue="CH" required />
 
       {error && <div className="text-accent text-sm">{error}</div>}
 
@@ -58,12 +58,12 @@ export function BuyForm({ productId }: { productId: number }) {
         disabled={loading}
         className="bg-ink text-paper py-4 text-sm font-bold uppercase tracking-widest disabled:opacity-50 hover:bg-accent transition-colors"
       >
-        {loading ? 'Sende…' : 'Verbindlich bestellen'}
+        {loading ? 'Sending…' : 'Place order'}
       </button>
 
       <p className="text-[11px] opacity-60 leading-relaxed">
-        Du erhältst eine QR-Rechnung per E-Mail. Werk wird nach Zahlungseingang
-        versandt. Reservation 7 Tage gültig.
+        You'll receive a Swiss QR-invoice by email. Item ships once payment
+        arrives. Reservation valid for 7 days.
       </p>
     </form>
   );

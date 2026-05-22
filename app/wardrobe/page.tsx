@@ -1,12 +1,11 @@
 import Link from 'next/link';
-import { Museum3D } from '@/components/Museum3D';
-import { DEMO_PAINTINGS } from '@/lib/demo-data';
+import { Wardrobe3D } from '@/components/Wardrobe3D';
+import { DEMO_CLOTHES } from '@/lib/demo-data';
 
 export const dynamic = 'force-static';
 
-export default function MuseumPage() {
-  // Hard-coded demo catalog so images always render on Vercel.
-  const paintings = DEMO_PAINTINGS;
+export default function WardrobePage() {
+  const items = DEMO_CLOTHES;
 
   return (
     <main className="fixed inset-0 bg-black">
@@ -17,9 +16,9 @@ export default function MuseumPage() {
         ← Nicodetta
       </Link>
       <div className="absolute top-5 right-6 z-40 text-white text-xs uppercase tracking-widest opacity-60">
-        Paintings · {paintings.length} works
+        Wardrobe · {items.length} pieces
       </div>
-      <Museum3D paintings={paintings} />
+      <Wardrobe3D items={items} />
     </main>
   );
 }

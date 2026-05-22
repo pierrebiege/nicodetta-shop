@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,wght@0,400..900;1,400..900&display=swap');
 
 @theme {
   --color-paper: #ffffff;
@@ -7,8 +8,9 @@
   --color-border: #e5e5e5;
   --color-accent: #ff3b1f;
 
-  --font-display: 'Inter', system-ui, -apple-system, 'Helvetica Neue', sans-serif;
+  --font-display: 'Bodoni Moda', 'Didot', 'Bodoni', Georgia, serif;
   --font-body: 'Inter', system-ui, -apple-system, 'Helvetica Neue', sans-serif;
+  --font-serif: 'Bodoni Moda', 'Didot', 'Bodoni', Georgia, serif;
 }
 
 @font-face {
@@ -23,7 +25,6 @@ html, body {
   background: var(--color-paper);
   color: var(--color-ink);
   font-family: var(--font-body);
-  font-feature-settings: 'ss01', 'cv11';
   -webkit-font-smoothing: antialiased;
   letter-spacing: -0.01em;
 }
@@ -43,5 +44,14 @@ button, a {
 
 .font-display {
   font-family: var(--font-display);
-  letter-spacing: -0.04em;
+  letter-spacing: -0.02em;
+  font-weight: 500;
+}
+
+.font-serif {
+  font-family: var(--font-serif);
+}
+
+.font-body {
+  font-family: var(--font-body);
 }

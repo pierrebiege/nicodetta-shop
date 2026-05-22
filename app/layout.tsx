@@ -1,19 +1,15 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { SmoothScroll } from '@/components/SmoothScroll';
 
 export const metadata: Metadata = {
-  title: 'Nicodetta — Werke & Kleidung',
-  description: 'Originale Bilder und verkünstlerte Kleidung von Nicodetta.',
+  title: 'Nicodetta — Paintings & Clothes',
+  description: 'Original paintings and artworked one-off clothing by Nicodetta.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="de">
-      <body className="bg-paper text-ink antialiased">
-        <SmoothScroll />
-        {children}
-      </body>
+    <html lang="en">
+      <body className="bg-paper text-ink antialiased">{children}</body>
     </html>
   );
 }
