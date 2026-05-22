@@ -847,7 +847,6 @@ function GameAudio({
 }) {
   const ctxRef = useRef<AudioContext | null>(null);
   const masterRef = useRef<GainNode | null>(null);
-  const ambientNodesRef = useRef<AudioNode[]>([]);
   const lastStepRef = useRef(0);
 
   // Lazily create AudioContext when the player enters (user gesture)
@@ -867,34 +866,6 @@ function GameAudio({
     master.gain.value = 1;
     master.connect(ctx.destination);
     masterRef.current = master;
-
-    // Ambient drone: two stacked low oscillators with slight detune + slow LFO
-    const osc1 = ctx.createOscillator();
-    osc1.type = 'sine';
-    osc1.frequency.value = 55;
-    const osc2 = ctx.createOscillator();
-    osc2.type = 'sine';
-    osc2.frequency.value = 82;
-    osc2.detune.value = -6;
-    const ambGain = ctx.createGain();
-    ambGain.gain.value = 0.045;
-
-    // Slow gain LFO so it breathes
-    const lfo = ctx.createOscillator();
-    lfo.type = 'sine';
-    lfo.frequency.value = 0.07;
-    const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 0.02;
-    lfo.connect(lfoGain).connect(ambGain.gain);
-
-    osc1.connect(ambGain);
-    osc2.connect(ambGain);
-    ambGain.connect(master);
-
-    osc1.start();
-    osc2.start();
-    lfo.start();
-    ambientNodesRef.current = [osc1, osc2, ambGain, lfo, lfoGain];
   }, [entered]);
 
   // Mute control
