@@ -18,6 +18,7 @@ export default async function Home() {
           Nicodetta
         </Link>
         <nav className="flex gap-6 text-xs uppercase tracking-widest font-medium">
+          <Link href="/museum">3D-Saal</Link>
           <a href="#bilder">Bilder</a>
           <a href="#kleidung">Kleidung</a>
           <Link href="/about">Über</Link>
@@ -38,9 +39,17 @@ export default async function Home() {
             Stück ein Unikat. Scroll durch die Räume, finde was bleibt.
           </p>
         </div>
-        <div className="mt-16 flex items-center gap-4 text-xs uppercase tracking-widest opacity-60">
-          <span>↓</span>
-          <span>Eintritt scrollen</span>
+        <div className="mt-16 flex items-center justify-between gap-4 text-xs uppercase tracking-widest">
+          <div className="flex items-center gap-4 opacity-60">
+            <span>↓</span>
+            <span>Eintritt scrollen</span>
+          </div>
+          <Link
+            href="/museum"
+            className="border border-ink px-4 py-3 hover:bg-ink hover:text-paper transition-colors font-bold"
+          >
+            3D-Saal betreten →
+          </Link>
         </div>
       </section>
 
