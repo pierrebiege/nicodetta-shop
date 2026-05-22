@@ -7,21 +7,72 @@ import * as THREE from 'three';
 import type { Product } from '@/db/schema';
 import { formatCHF } from '@/lib/format';
 
-// Long narrow boutique room
-const ROOM_W = 8;  // x (left-right) — narrow corridor
-const ROOM_D = 22; // z (length you walk down)
+// ─── Layout (one big shared scene) ─────────────────────────────────────────
+//
+// Museum room (paintings)        Wardrobe room (clothes)
+//
+//    +----- 24m ------+
+//    |                |
+//   16m   MUSEUM      | doorway   +-- 8m --+
+//    |                |   3m wide |        |
+//    |                |   ────►   |WARDROBE|  22m
+//    |        +-----DOORWAY-------|        |
+//    +----------------+           |        |
+//                                 +--------+
+//
+//  Shared coordinate system:
+//    Museum interior: x[-12..12], z[-8..8]
+//    Wardrobe interior: x[-4..4], z[8..30]
+//    Doorway opening: x[-1.5..1.5], z=8 (the shared wall)
+
+const MUSEUM_W = 24;
+const MUSEUM_D = 16;
+const WARDROBE_W = 8;
+const WARDROBE_D = 22;
 const ROOM_H = 6.0;
+const DOORWAY_W = 3.0;
+const DOORWAY_H = 3.0;
+
+const MUSEUM_X_MIN = -MUSEUM_W / 2;
+const MUSEUM_X_MAX = MUSEUM_W / 2;
+const MUSEUM_Z_MIN = -MUSEUM_D / 2;
+const MUSEUM_Z_MAX = MUSEUM_D / 2; // = 8
+
+const WARDROBE_X_MIN = -WARDROBE_W / 2;
+const WARDROBE_X_MAX = WARDROBE_W / 2;
+const WARDROBE_Z_MIN = MUSEUM_Z_MAX; // = 8
+const WARDROBE_Z_MAX = MUSEUM_Z_MAX + WARDROBE_D; // = 30
+
+const DOORWAY_X_MIN = -DOORWAY_W / 2;
+const DOORWAY_X_MAX = DOORWAY_W / 2;
+
 const EYE = 1.65;
-const WALL_INSET = 0.5;
+const INSET = 0.45;
 const SPEED = 5.0;
 
-const RAIL_HEIGHT = 2.4;
-const RAIL_X_OFFSET = 2.2; // each rail this far from centre line
-const ITEM_CENTER_Y = 1.3; // garments hang at body height
-const HANGER_Y = 2.1;
+const PAINTING_CENTER_Y = 1.55;
+const PAINTING_DEFAULT_W = 0.8;
+const PAINTING_DEFAULT_H = 1.0;
+const WARDROBE_RAIL_HEIGHT = 2.4;
+const WARDROBE_RAIL_X = 2.2;
+const WARDROBE_ITEM_Y = 1.3;
+const WARDROBE_HANGER_Y = 2.1;
 
 const WALL_PANEL_M = 2.6;
 const FLOOR_TILE_M = 1.5;
+
+function isWalkable(x: number, z: number): boolean {
+  const inMuseum =
+    x >= MUSEUM_X_MIN + INSET && x <= MUSEUM_X_MAX - INSET &&
+    z >= MUSEUM_Z_MIN + INSET && z <= MUSEUM_Z_MAX - 0.02;
+  const inDoorway =
+    x >= DOORWAY_X_MIN && x <= DOORWAY_X_MAX &&
+    z >= MUSEUM_Z_MAX - 0.3 && z <= MUSEUM_Z_MAX + 0.3;
+  const inWardrobe =
+    x >= WARDROBE_X_MIN + INSET && x <= WARDROBE_X_MAX - INSET &&
+    z >= WARDROBE_Z_MIN + 0.02 && z <= WARDROBE_Z_MAX - INSET;
+  return inMuseum || inDoorway || inWardrobe;
+}
 
 type TouchRefs = {
   moveX: { current: number };
@@ -30,11 +81,22 @@ type TouchRefs = {
   lookY: { current: number };
 };
 
-export function Wardrobe3D({ items }: { items: Product[] }) {
+type SpawnSpec = { position: [number, number, number]; lookAt: [number, number, number] };
+
+export function Hall3D({
+  paintings,
+  clothes,
+  spawn,
+}: {
+  paintings: Product[];
+  clothes: Product[];
+  spawn: SpawnSpec;
+}) {
   const [entered, setEntered] = useState(false);
   const [hovered, setHovered] = useState<Product | null>(null);
   const [isTouch, setIsTouch] = useState(false);
   const [showTutorial, setShowTutorial] = useState(true);
+  const [room, setRoom] = useState<'museum' | 'wardrobe'>('museum');
   const controlsRef = useRef<any>(null);
 
   const touchRefs: TouchRefs = useMemo(
@@ -51,15 +113,15 @@ export function Wardrobe3D({ items }: { items: Product[] }) {
   useEffect(() => {
     if (!entered) return;
     function onMove(e: KeyboardEvent) {
-      if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+      if (['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) {
         setShowTutorial(false);
       }
     }
     window.addEventListener('keydown', onMove);
-    const fallback = setTimeout(() => setShowTutorial(false), 6000);
+    const t = setTimeout(() => setShowTutorial(false), 6000);
     return () => {
       window.removeEventListener('keydown', onMove);
-      clearTimeout(fallback);
+      clearTimeout(t);
     };
   }, [entered]);
 
@@ -77,22 +139,34 @@ export function Wardrobe3D({ items }: { items: Product[] }) {
     <>
       <Canvas
         shadows
-        camera={{ fov: 75, near: 0.05, far: 80, position: [0, EYE, ROOM_D / 2 - 2] }}
+        camera={{ fov: 75, near: 0.05, far: 100, position: spawn.position }}
         gl={{ antialias: true, toneMappingExposure: 1.3 }}
         dpr={[1, 2]}
+        onCreated={({ camera }) => {
+          camera.lookAt(...spawn.lookAt);
+        }}
       >
         <color attach="background" args={['#e8ebee']} />
-        <fog attach="fog" args={['#e8ebee', 16, 38]} />
+        <fog attach="fog" args={['#e8ebee', 18, 46]} />
 
         <ambientLight intensity={1.0} color="#ffffff" />
         <hemisphereLight args={['#ffffff', '#cfd3d8', 0.9]} />
-        <directionalLight position={[3, 8, 6]} intensity={0.6} color="#ffffff" castShadow />
+        <directionalLight position={[6, 12, 4]} intensity={0.6} color="#ffffff" castShadow />
 
         <Suspense fallback={null}>
-          <Room />
-          <Rails />
-          <Items items={items} hovered={hovered} onHover={setHovered} />
-          <Movement entered={entered} isTouch={isTouch} touchRefs={touchRefs} />
+          <MuseumRoom />
+          <WardrobeRoom />
+          <Doorway />
+
+          <Paintings paintings={paintings} hovered={hovered} onHover={setHovered} />
+          <ClothingRack items={clothes} hovered={hovered} onHover={setHovered} />
+
+          <Movement
+            entered={entered}
+            isTouch={isTouch}
+            touchRefs={touchRefs}
+            onRoomChange={setRoom}
+          />
         </Suspense>
 
         {!isTouch && (
@@ -104,6 +178,7 @@ export function Wardrobe3D({ items }: { items: Product[] }) {
         )}
       </Canvas>
 
+      {/* Crosshair / hover indicator */}
       {entered && !isTouch && (
         <div className="pointer-events-none fixed inset-0 z-30 flex items-center justify-center">
           {hovered ? (
@@ -133,8 +208,9 @@ export function Wardrobe3D({ items }: { items: Product[] }) {
           <div className="bg-black/80 text-white px-5 py-3">
             <div className="font-display uppercase text-xl tracking-tight">{hovered.title}</div>
             <div className="text-[10px] uppercase tracking-widest opacity-90 mt-1">
-              {hovered.year} {hovered.technique ? `· ${hovered.technique}` : ''} ·{' '}
-              {formatCHF(hovered.priceRappen)}
+              {hovered.year}{hovered.technique ? ` · ${hovered.technique}` : ''}
+              {hovered.width && hovered.height ? ` · ${hovered.width}×${hovered.height} cm` : ''}
+              {' · '}{formatCHF(hovered.priceRappen)}
             </div>
           </div>
         </div>
@@ -146,9 +222,8 @@ export function Wardrobe3D({ items }: { items: Product[] }) {
           className="fixed inset-0 z-20 flex flex-col items-center justify-center bg-black/80 text-white backdrop-blur-sm cursor-pointer px-6"
         >
           <div className="font-serif font-medium uppercase text-[clamp(3rem,8vw,7rem)] leading-[0.85] tracking-tight">
-            Wardrobe
+            Enter
           </div>
-
           <div className="mt-12 max-w-2xl">
             {isTouch ? (
               <div className="space-y-6 text-center">
@@ -178,14 +253,16 @@ export function Wardrobe3D({ items }: { items: Product[] }) {
                   <div className="text-left">
                     <div className="font-display uppercase text-2xl">Look + click</div>
                     <div className="text-xs uppercase tracking-widest opacity-70 mt-1">
-                      Move mouse · Click any piece to open · ESC to leave
+                      Move mouse · Click any piece · ESC to leave
                     </div>
                   </div>
+                </div>
+                <div className="text-center text-[11px] uppercase tracking-widest opacity-70">
+                  Tip: walk through the doorway to switch rooms
                 </div>
               </div>
             )}
           </div>
-
           <div className="mt-12 font-display uppercase text-base tracking-widest border border-white px-6 py-3">
             {isTouch ? 'Tap to start' : 'Click to start'}
           </div>
@@ -222,6 +299,13 @@ export function Wardrobe3D({ items }: { items: Product[] }) {
 
       {entered && isTouch && <TouchUI touchRefs={touchRefs} />}
 
+      {/* Persistent room indicator */}
+      {entered && (
+        <div className="pointer-events-none fixed top-5 left-1/2 -translate-x-1/2 z-30 bg-white/80 text-ink px-4 py-2 text-[10px] uppercase tracking-[0.3em] font-serif">
+          {room === 'museum' ? 'Paintings' : 'Wardrobe'}
+        </div>
+      )}
+
       {entered && !isTouch && (
         <div className="pointer-events-none fixed top-5 left-6 z-30 text-ink text-[10px] uppercase tracking-widest opacity-70 bg-white/70 px-3 py-2 backdrop-blur-sm">
           WASD = Move · Mouse = Look · ESC = Leave
@@ -231,7 +315,7 @@ export function Wardrobe3D({ items }: { items: Product[] }) {
   );
 }
 
-// ─── Visual ────────────────────────────────────────────────────────────────
+// ─── Visual hints ──────────────────────────────────────────────────────────
 
 function KbdGroup({ small = false }: { small?: boolean }) {
   const size = small ? 'w-7 h-7 text-[11px]' : 'w-11 h-11 text-base';
@@ -243,11 +327,7 @@ function KbdGroup({ small = false }: { small?: boolean }) {
   );
 }
 function Kbd({ children, size }: { children: React.ReactNode; size: string }) {
-  return (
-    <div className={`${size} flex items-center justify-center border-2 border-white text-white font-display uppercase`}>
-      {children}
-    </div>
-  );
+  return <div className={`${size} flex items-center justify-center border-2 border-white text-white font-display uppercase`}>{children}</div>;
 }
 function MouseG({ small = false }: { small?: boolean }) {
   const dim = small ? 'w-7 h-10' : 'w-10 h-14';
@@ -271,65 +351,221 @@ function Row({ children, label, detail }: { children: React.ReactNode; label: st
   );
 }
 
-// ─── Geometry ──────────────────────────────────────────────────────────────
+// ─── Museum room geometry ──────────────────────────────────────────────────
 
-function Room() {
+function MuseumRoom() {
   const wallTex = useMemo(() => makePanelTexture(), []);
   const floorTex = useMemo(() => makeFloorTexture(), []);
-  const ceilTex = useMemo(() => makePanelTexture(), []);
 
+  // Front wall (z=+8) is the doorway side — render as 4 segments around the opening
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[ROOM_W, ROOM_D]} />
+      {/* Floor */}
+      <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[MUSEUM_W, MUSEUM_D]} />
         <meshStandardMaterial
-          map={cloneRepeat(floorTex, ROOM_W / FLOOR_TILE_M, ROOM_D / FLOOR_TILE_M)}
+          map={cloneRepeat(floorTex, MUSEUM_W / FLOOR_TILE_M, MUSEUM_D / FLOOR_TILE_M)}
           color="#ffffff"
           roughness={0.55}
           metalness={0.05}
         />
       </mesh>
-
-      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, ROOM_H, 0]}>
-        <planeGeometry args={[ROOM_W, ROOM_D]} />
+      {/* Ceiling */}
+      <mesh position={[0, ROOM_H, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[MUSEUM_W, MUSEUM_D]} />
         <meshStandardMaterial
-          map={cloneRepeat(ceilTex, ROOM_W / WALL_PANEL_M, ROOM_D / WALL_PANEL_M)}
+          map={cloneRepeat(wallTex, MUSEUM_W / WALL_PANEL_M, MUSEUM_D / WALL_PANEL_M)}
           color="#ffffff"
           roughness={0.95}
         />
       </mesh>
+      {/* Back wall (z=-8) */}
+      <WallPlane w={MUSEUM_W} h={ROOM_H} position={[0, ROOM_H / 2, MUSEUM_Z_MIN]} rotation={[0, 0, 0]} tex={wallTex} />
+      {/* Left wall (x=-12) */}
+      <WallPlane w={MUSEUM_D} h={ROOM_H} position={[MUSEUM_X_MIN, ROOM_H / 2, 0]} rotation={[0, Math.PI / 2, 0]} tex={wallTex} />
+      {/* Right wall (x=+12) */}
+      <WallPlane w={MUSEUM_D} h={ROOM_H} position={[MUSEUM_X_MAX, ROOM_H / 2, 0]} rotation={[0, -Math.PI / 2, 0]} tex={wallTex} />
 
-      <Wall w={ROOM_W} h={ROOM_H} position={[0, ROOM_H / 2, -ROOM_D / 2]} rotation={[0, 0, 0]} tex={wallTex} />
-      <Wall w={ROOM_W} h={ROOM_H} position={[0, ROOM_H / 2, ROOM_D / 2]} rotation={[0, Math.PI, 0]} tex={wallTex} />
-      <Wall w={ROOM_D} h={ROOM_H} position={[-ROOM_W / 2, ROOM_H / 2, 0]} rotation={[0, Math.PI / 2, 0]} tex={wallTex} />
-      <Wall w={ROOM_D} h={ROOM_H} position={[ROOM_W / 2, ROOM_H / 2, 0]} rotation={[0, -Math.PI / 2, 0]} tex={wallTex} />
+      {/* Front wall (z=+8) with doorway hole — 3 segments */}
+      {/* Left of doorway */}
+      <WallPlane
+        w={(MUSEUM_W / 2) - DOORWAY_W / 2}
+        h={ROOM_H}
+        position={[(MUSEUM_X_MIN + DOORWAY_X_MIN) / 2, ROOM_H / 2, MUSEUM_Z_MAX]}
+        rotation={[0, Math.PI, 0]}
+        tex={wallTex}
+      />
+      {/* Right of doorway */}
+      <WallPlane
+        w={(MUSEUM_W / 2) - DOORWAY_W / 2}
+        h={ROOM_H}
+        position={[(MUSEUM_X_MAX + DOORWAY_X_MAX) / 2, ROOM_H / 2, MUSEUM_Z_MAX]}
+        rotation={[0, Math.PI, 0]}
+        tex={wallTex}
+      />
+      {/* Above the doorway */}
+      <WallPlane
+        w={DOORWAY_W}
+        h={ROOM_H - DOORWAY_H}
+        position={[0, (ROOM_H + DOORWAY_H) / 2, MUSEUM_Z_MAX]}
+        rotation={[0, Math.PI, 0]}
+        tex={wallTex}
+      />
 
       {/* LED strips along ceiling */}
-      <LedStrip from={[-ROOM_W / 2, ROOM_H - 0.03, -ROOM_D / 2 + 0.02]} to={[ROOM_W / 2, ROOM_H - 0.03, -ROOM_D / 2 + 0.02]} />
-      <LedStrip from={[-ROOM_W / 2, ROOM_H - 0.03, ROOM_D / 2 - 0.02]} to={[ROOM_W / 2, ROOM_H - 0.03, ROOM_D / 2 - 0.02]} />
-      <LedStrip from={[-ROOM_W / 2 + 0.02, ROOM_H - 0.03, -ROOM_D / 2]} to={[-ROOM_W / 2 + 0.02, ROOM_H - 0.03, ROOM_D / 2]} />
-      <LedStrip from={[ROOM_W / 2 - 0.02, ROOM_H - 0.03, -ROOM_D / 2]} to={[ROOM_W / 2 - 0.02, ROOM_H - 0.03, ROOM_D / 2]} />
+      <LedStrip from={[MUSEUM_X_MIN, ROOM_H - 0.03, MUSEUM_Z_MIN + 0.02]} to={[MUSEUM_X_MAX, ROOM_H - 0.03, MUSEUM_Z_MIN + 0.02]} />
+      <LedStrip from={[MUSEUM_X_MIN + 0.02, ROOM_H - 0.03, MUSEUM_Z_MIN]} to={[MUSEUM_X_MIN + 0.02, ROOM_H - 0.03, MUSEUM_Z_MAX]} />
+      <LedStrip from={[MUSEUM_X_MAX - 0.02, ROOM_H - 0.03, MUSEUM_Z_MIN]} to={[MUSEUM_X_MAX - 0.02, ROOM_H - 0.03, MUSEUM_Z_MAX]} />
+      {/* Front ceiling line (split around doorway is fine to leave full, it's high up) */}
+      <LedStrip from={[MUSEUM_X_MIN, ROOM_H - 0.03, MUSEUM_Z_MAX - 0.02]} to={[MUSEUM_X_MAX, ROOM_H - 0.03, MUSEUM_Z_MAX - 0.02]} />
 
-      {/* LED accents along floor */}
-      <LedStrip from={[-ROOM_W / 2, 0.03, -ROOM_D / 2 + 0.02]} to={[ROOM_W / 2, 0.03, -ROOM_D / 2 + 0.02]} accent />
-      <LedStrip from={[-ROOM_W / 2, 0.03, ROOM_D / 2 - 0.02]} to={[ROOM_W / 2, 0.03, ROOM_D / 2 - 0.02]} accent />
-      <LedStrip from={[-ROOM_W / 2 + 0.02, 0.03, -ROOM_D / 2]} to={[-ROOM_W / 2 + 0.02, 0.03, ROOM_D / 2]} accent />
-      <LedStrip from={[ROOM_W / 2 - 0.02, 0.03, -ROOM_D / 2]} to={[ROOM_W / 2 - 0.02, 0.03, ROOM_D / 2]} accent />
+      {/* Floor LED accents */}
+      <LedStrip from={[MUSEUM_X_MIN, 0.03, MUSEUM_Z_MIN + 0.02]} to={[MUSEUM_X_MAX, 0.03, MUSEUM_Z_MIN + 0.02]} accent />
+      <LedStrip from={[MUSEUM_X_MIN + 0.02, 0.03, MUSEUM_Z_MIN]} to={[MUSEUM_X_MIN + 0.02, 0.03, MUSEUM_Z_MAX]} accent />
+      <LedStrip from={[MUSEUM_X_MAX - 0.02, 0.03, MUSEUM_Z_MIN]} to={[MUSEUM_X_MAX - 0.02, 0.03, MUSEUM_Z_MAX]} accent />
 
-      {/* Spaced ceiling fill lights down the corridor */}
-      {[-7, -2, 3, 8].map((z) => (
+      {/* Ceiling fill lights */}
+      {[[-6,-4],[6,-4],[-6,4],[6,4]].map(([x, z]) => (
+        <pointLight key={`${x},${z}`} position={[x, ROOM_H - 0.3, z]} intensity={0.55} distance={10} color="#ffffff" />
+      ))}
+    </group>
+  );
+}
+
+// ─── Wardrobe room geometry ────────────────────────────────────────────────
+
+function WardrobeRoom() {
+  const wallTex = useMemo(() => makePanelTexture(), []);
+  const floorTex = useMemo(() => makeFloorTexture(), []);
+
+  const cz = (WARDROBE_Z_MIN + WARDROBE_Z_MAX) / 2;
+
+  return (
+    <group>
+      {/* Floor */}
+      <mesh position={[0, 0, cz]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[WARDROBE_W, WARDROBE_D]} />
+        <meshStandardMaterial
+          map={cloneRepeat(floorTex, WARDROBE_W / FLOOR_TILE_M, WARDROBE_D / FLOOR_TILE_M)}
+          color="#ffffff"
+          roughness={0.55}
+          metalness={0.05}
+        />
+      </mesh>
+      {/* Ceiling */}
+      <mesh position={[0, ROOM_H, cz]} rotation={[Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[WARDROBE_W, WARDROBE_D]} />
+        <meshStandardMaterial
+          map={cloneRepeat(wallTex, WARDROBE_W / WALL_PANEL_M, WARDROBE_D / WALL_PANEL_M)}
+          color="#ffffff"
+          roughness={0.95}
+        />
+      </mesh>
+      {/* Back wall (z=WARDROBE_Z_MAX) */}
+      <WallPlane w={WARDROBE_W} h={ROOM_H} position={[0, ROOM_H / 2, WARDROBE_Z_MAX]} rotation={[0, Math.PI, 0]} tex={wallTex} />
+      {/* Left wall */}
+      <WallPlane w={WARDROBE_D} h={ROOM_H} position={[WARDROBE_X_MIN, ROOM_H / 2, cz]} rotation={[0, Math.PI / 2, 0]} tex={wallTex} />
+      {/* Right wall */}
+      <WallPlane w={WARDROBE_D} h={ROOM_H} position={[WARDROBE_X_MAX, ROOM_H / 2, cz]} rotation={[0, -Math.PI / 2, 0]} tex={wallTex} />
+
+      {/* Front wall (z=WARDROBE_Z_MIN = 8) with doorway hole — same pattern */}
+      {/* Left of doorway */}
+      <WallPlane
+        w={(WARDROBE_W / 2) - DOORWAY_W / 2}
+        h={ROOM_H}
+        position={[(WARDROBE_X_MIN + DOORWAY_X_MIN) / 2, ROOM_H / 2, WARDROBE_Z_MIN]}
+        rotation={[0, 0, 0]}
+        tex={wallTex}
+      />
+      {/* Right of doorway */}
+      <WallPlane
+        w={(WARDROBE_W / 2) - DOORWAY_W / 2}
+        h={ROOM_H}
+        position={[(WARDROBE_X_MAX + DOORWAY_X_MAX) / 2, ROOM_H / 2, WARDROBE_Z_MIN]}
+        rotation={[0, 0, 0]}
+        tex={wallTex}
+      />
+      {/* Above the doorway */}
+      <WallPlane
+        w={DOORWAY_W}
+        h={ROOM_H - DOORWAY_H}
+        position={[0, (ROOM_H + DOORWAY_H) / 2, WARDROBE_Z_MIN]}
+        rotation={[0, 0, 0]}
+        tex={wallTex}
+      />
+
+      {/* Rails (chrome cylinders the length of the wardrobe) */}
+      <mesh position={[-WARDROBE_RAIL_X, WARDROBE_RAIL_HEIGHT, cz]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.025, 0.025, WARDROBE_D - 2, 16]} />
+        <meshStandardMaterial color="#b0b6bc" metalness={0.9} roughness={0.3} />
+      </mesh>
+      <mesh position={[WARDROBE_RAIL_X, WARDROBE_RAIL_HEIGHT, cz]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.025, 0.025, WARDROBE_D - 2, 16]} />
+        <meshStandardMaterial color="#b0b6bc" metalness={0.9} roughness={0.3} />
+      </mesh>
+
+      {/* LED strips along ceiling */}
+      <LedStrip from={[WARDROBE_X_MIN, ROOM_H - 0.03, WARDROBE_Z_MIN + 0.02]} to={[WARDROBE_X_MAX, ROOM_H - 0.03, WARDROBE_Z_MIN + 0.02]} />
+      <LedStrip from={[WARDROBE_X_MIN, ROOM_H - 0.03, WARDROBE_Z_MAX - 0.02]} to={[WARDROBE_X_MAX, ROOM_H - 0.03, WARDROBE_Z_MAX - 0.02]} />
+      <LedStrip from={[WARDROBE_X_MIN + 0.02, ROOM_H - 0.03, WARDROBE_Z_MIN]} to={[WARDROBE_X_MIN + 0.02, ROOM_H - 0.03, WARDROBE_Z_MAX]} />
+      <LedStrip from={[WARDROBE_X_MAX - 0.02, ROOM_H - 0.03, WARDROBE_Z_MIN]} to={[WARDROBE_X_MAX - 0.02, ROOM_H - 0.03, WARDROBE_Z_MAX]} />
+
+      {/* Floor LED accents */}
+      <LedStrip from={[WARDROBE_X_MIN, 0.03, WARDROBE_Z_MAX - 0.02]} to={[WARDROBE_X_MAX, 0.03, WARDROBE_Z_MAX - 0.02]} accent />
+      <LedStrip from={[WARDROBE_X_MIN + 0.02, 0.03, WARDROBE_Z_MIN]} to={[WARDROBE_X_MIN + 0.02, 0.03, WARDROBE_Z_MAX]} accent />
+      <LedStrip from={[WARDROBE_X_MAX - 0.02, 0.03, WARDROBE_Z_MIN]} to={[WARDROBE_X_MAX - 0.02, 0.03, WARDROBE_Z_MAX]} accent />
+
+      {/* Ceiling fill lights along the corridor */}
+      {[12, 17, 22, 27].map((z) => (
         <pointLight key={z} position={[0, ROOM_H - 0.3, z]} intensity={0.55} distance={9} color="#ffffff" />
       ))}
     </group>
   );
 }
 
-function Wall({
+// ─── Doorway frame + signage ───────────────────────────────────────────────
+
+function Doorway() {
+  // A subtle dark frame around the opening for visibility, plus glow lights
+  const frameDepth = 0.08;
+  const frameWidth = 0.06;
+  return (
+    <group position={[0, 0, MUSEUM_Z_MAX]}>
+      {/* Top lintel */}
+      <mesh position={[0, DOORWAY_H, 0]}>
+        <boxGeometry args={[DOORWAY_W + 0.4, frameWidth, frameDepth * 2]} />
+        <meshStandardMaterial color="#0a0a0a" />
+      </mesh>
+      {/* Side jambs */}
+      <mesh position={[DOORWAY_X_MIN, DOORWAY_H / 2, 0]}>
+        <boxGeometry args={[frameWidth, DOORWAY_H, frameDepth * 2]} />
+        <meshStandardMaterial color="#0a0a0a" />
+      </mesh>
+      <mesh position={[DOORWAY_X_MAX, DOORWAY_H / 2, 0]}>
+        <boxGeometry args={[frameWidth, DOORWAY_H, frameDepth * 2]} />
+        <meshStandardMaterial color="#0a0a0a" />
+      </mesh>
+      {/* Floor strip under the doorway */}
+      <mesh position={[0, 0.005, 0]}>
+        <boxGeometry args={[DOORWAY_W, 0.01, 0.3]} />
+        <meshBasicMaterial color="#8fc1ff" toneMapped={false} />
+      </mesh>
+      {/* Doorway accent lights */}
+      <pointLight position={[0, DOORWAY_H - 0.2, -0.5]} intensity={0.5} distance={3} color="#ffe8c0" />
+      <pointLight position={[0, DOORWAY_H - 0.2, 0.5]} intensity={0.5} distance={3} color="#ffe8c0" />
+    </group>
+  );
+}
+
+function WallPlane({
   w, h, position, rotation, tex,
 }: {
-  w: number; h: number; position: [number, number, number]; rotation: [number, number, number]; tex: THREE.Texture;
+  w: number; h: number;
+  position: [number, number, number];
+  rotation: [number, number, number];
+  tex: THREE.Texture;
 }) {
-  const mapped = useMemo(() => cloneRepeat(tex, w / WALL_PANEL_M, h / WALL_PANEL_M), [tex, w, h]);
+  const mapped = useMemo(() => cloneRepeat(tex, Math.max(1, w / WALL_PANEL_M), Math.max(1, h / WALL_PANEL_M)), [tex, w, h]);
   return (
     <mesh position={position} rotation={rotation} receiveShadow>
       <planeGeometry args={[w, h]} />
@@ -355,41 +591,113 @@ function LedStrip({
   );
 }
 
-// Two long chrome rails running the length of the corridor
-function Rails() {
-  const railLen = ROOM_D - 2;
+// ─── Paintings (museum walls) ──────────────────────────────────────────────
+
+function Paintings({
+  paintings, hovered, onHover,
+}: { paintings: Product[]; hovered: Product | null; onHover: (p: Product | null) => void }) {
+  const slots = useMemo(() => buildPaintingSlots(paintings.length), [paintings.length]);
   return (
-    <group>
-      {/* Left rail */}
-      <mesh position={[-RAIL_X_OFFSET, RAIL_HEIGHT, 0]} rotation={[Math.PI / 2, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.025, 0.025, railLen, 16]} />
-        <meshStandardMaterial color="#b0b6bc" metalness={0.9} roughness={0.3} />
-      </mesh>
-      {/* Right rail */}
-      <mesh position={[RAIL_X_OFFSET, RAIL_HEIGHT, 0]} rotation={[Math.PI / 2, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.025, 0.025, railLen, 16]} />
-        <meshStandardMaterial color="#b0b6bc" metalness={0.9} roughness={0.3} />
-      </mesh>
-      {/* End-cap supports */}
-      {[-railLen / 2, railLen / 2].map((z) => (
-        <group key={z}>
-          <mesh position={[-RAIL_X_OFFSET, RAIL_HEIGHT + 0.5, z]}>
-            <cylinderGeometry args={[0.02, 0.02, 1.1, 12]} />
-            <meshStandardMaterial color="#b0b6bc" metalness={0.9} roughness={0.3} />
-          </mesh>
-          <mesh position={[RAIL_X_OFFSET, RAIL_HEIGHT + 0.5, z]}>
-            <cylinderGeometry args={[0.02, 0.02, 1.1, 12]} />
-            <meshStandardMaterial color="#b0b6bc" metalness={0.9} roughness={0.3} />
-          </mesh>
-        </group>
+    <>
+      {paintings.map((p, i) => (
+        <Painting
+          key={p.id}
+          product={p}
+          slot={slots[i % slots.length]}
+          isHovered={hovered?.id === p.id}
+          onHover={onHover}
+        />
       ))}
+    </>
+  );
+}
+
+function buildPaintingSlots(count: number) {
+  // 12 paintings: back(4) + left(3) + right(3) + front-left(1) + front-right(1) = 12
+  // Front wall has doorway in centre, so place 1 painting on each side of it
+  const slots: { position: [number, number, number]; rotation: [number, number, number] }[] = [];
+  const offWall = 0.02;
+  // Back wall (z=MUSEUM_Z_MIN, faces +z)
+  for (let i = 0; i < 4; i++) {
+    slots.push({
+      position: [((i + 0.5) / 4 - 0.5) * (MUSEUM_W - 1.5), PAINTING_CENTER_Y, MUSEUM_Z_MIN + offWall],
+      rotation: [0, 0, 0],
+    });
+  }
+  // Left wall (x=MUSEUM_X_MIN, faces +x)
+  for (let i = 0; i < 3; i++) {
+    slots.push({
+      position: [MUSEUM_X_MIN + offWall, PAINTING_CENTER_Y, ((i + 0.5) / 3 - 0.5) * (MUSEUM_D - 2)],
+      rotation: [0, Math.PI / 2, 0],
+    });
+  }
+  // Right wall (x=MUSEUM_X_MAX, faces -x)
+  for (let i = 0; i < 3; i++) {
+    slots.push({
+      position: [MUSEUM_X_MAX - offWall, PAINTING_CENTER_Y, ((i + 0.5) / 3 - 0.5) * (MUSEUM_D - 2)],
+      rotation: [0, -Math.PI / 2, 0],
+    });
+  }
+  // Front wall — left and right of doorway
+  slots.push({
+    position: [(MUSEUM_X_MIN + DOORWAY_X_MIN) / 2, PAINTING_CENTER_Y, MUSEUM_Z_MAX - offWall],
+    rotation: [0, Math.PI, 0],
+  });
+  slots.push({
+    position: [(MUSEUM_X_MAX + DOORWAY_X_MAX) / 2, PAINTING_CENTER_Y, MUSEUM_Z_MAX - offWall],
+    rotation: [0, Math.PI, 0],
+  });
+  return slots.slice(0, count);
+}
+
+function Painting({
+  product, slot, isHovered, onHover,
+}: {
+  product: Product;
+  slot: { position: [number, number, number]; rotation: [number, number, number] };
+  isHovered: boolean;
+  onHover: (p: Product | null) => void;
+}) {
+  const router = useRouter();
+  const texture = useLoader(THREE.TextureLoader, product.imagePath);
+  const groupRef = useRef<THREE.Group>(null);
+
+  const w = product.width && product.height ? product.width / 100 : PAINTING_DEFAULT_W;
+  const h = product.width && product.height ? product.height / 100 : PAINTING_DEFAULT_H;
+
+  useFrame(() => {
+    if (!groupRef.current) return;
+    const target = isHovered ? 1.04 : 1.0;
+    groupRef.current.scale.x += (target - groupRef.current.scale.x) * 0.15;
+    groupRef.current.scale.y += (target - groupRef.current.scale.y) * 0.15;
+  });
+
+  return (
+    <group ref={groupRef} position={slot.position} rotation={slot.rotation}>
+      <mesh position={[0, 0, -0.008]}>
+        <planeGeometry args={[w + 0.12, h + 0.12]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={isHovered ? 1 : 0} toneMapped={false} />
+      </mesh>
+      <mesh position={[0, 0, -0.004]}>
+        <planeGeometry args={[w + 0.05, h + 0.05]} />
+        <meshBasicMaterial color="#0a0a0a" toneMapped={false} />
+      </mesh>
+      <mesh
+        onClick={(e) => { e.stopPropagation(); router.push(`/werk/${product.slug}`); }}
+        onPointerOver={(e) => { e.stopPropagation(); onHover(product); document.body.style.cursor = 'pointer'; }}
+        onPointerOut={() => { onHover(null); document.body.style.cursor = ''; }}
+      >
+        <planeGeometry args={[w, h]} />
+        <meshBasicMaterial map={texture} toneMapped={false} />
+      </mesh>
+      <pointLight position={[0, h / 2 + 0.25, 0.4]} intensity={0.4} distance={2.2} color="#fff5e8" />
     </group>
   );
 }
 
-// ─── Items hanging from rails ──────────────────────────────────────────────
+// ─── Clothing rack ────────────────────────────────────────────────────────
 
-function Items({
+function ClothingRack({
   items, hovered, onHover,
 }: { items: Product[]; hovered: Product | null; onHover: (p: Product | null) => void }) {
   const slots = useMemo(() => buildHangingSlots(items.length), [items.length]);
@@ -408,29 +716,22 @@ function Items({
   );
 }
 
-type Slot = {
-  position: [number, number, number];
-  rotation: [number, number, number];
-};
-
-function buildHangingSlots(count: number): Slot[] {
-  const slots: Slot[] = [];
-  const per = Math.ceil(count / 2); // items per rail
-  // Distribute Z evenly along the rail
-  const railLen = ROOM_D - 3;
+function buildHangingSlots(count: number) {
+  const slots: { position: [number, number, number]; rotation: [number, number, number] }[] = [];
+  const per = Math.ceil(count / 2);
+  const cz = (WARDROBE_Z_MIN + WARDROBE_Z_MAX) / 2;
+  const railLen = WARDROBE_D - 4;
   for (let i = 0; i < per; i++) {
-    const z = ((i + 0.5) / per - 0.5) * railLen;
-    // Left rail: faces +x (into the aisle)
+    const z = cz + ((i + 0.5) / per - 0.5) * railLen;
     slots.push({
-      position: [-RAIL_X_OFFSET + 0.1, ITEM_CENTER_Y, z],
+      position: [-WARDROBE_RAIL_X + 0.1, WARDROBE_ITEM_Y, z],
       rotation: [0, Math.PI / 2, 0],
     });
   }
   for (let i = 0; i < per; i++) {
-    const z = ((i + 0.5) / per - 0.5) * railLen;
-    // Right rail: faces -x
+    const z = cz + ((i + 0.5) / per - 0.5) * railLen;
     slots.push({
-      position: [RAIL_X_OFFSET - 0.1, ITEM_CENTER_Y, z],
+      position: [WARDROBE_RAIL_X - 0.1, WARDROBE_ITEM_Y, z],
       rotation: [0, -Math.PI / 2, 0],
     });
   }
@@ -439,81 +740,72 @@ function buildHangingSlots(count: number): Slot[] {
 
 function HangingItem({
   product, slot, isHovered, onHover,
-}: { product: Product; slot: Slot; isHovered: boolean; onHover: (p: Product | null) => void }) {
+}: {
+  product: Product;
+  slot: { position: [number, number, number]; rotation: [number, number, number] };
+  isHovered: boolean;
+  onHover: (p: Product | null) => void;
+}) {
   const router = useRouter();
   const texture = useLoader(THREE.TextureLoader, product.imagePath);
   const groupRef = useRef<THREE.Group>(null);
 
-  // Garments: roughly 80cm wide, 110cm tall
   const w = 0.8;
   const h = 1.1;
 
-  useFrame((_, delta) => {
+  useFrame(() => {
     if (!groupRef.current) return;
     const target = isHovered ? 1.06 : 1.0;
     groupRef.current.scale.x += (target - groupRef.current.scale.x) * 0.15;
     groupRef.current.scale.y += (target - groupRef.current.scale.y) * 0.15;
-
-    // Gentle sway
     const t = performance.now() * 0.0007 + slot.position[2];
     groupRef.current.rotation.z = Math.sin(t) * 0.02;
   });
 
   return (
     <group ref={groupRef} position={slot.position} rotation={slot.rotation}>
-      {/* Hanger hook + bar */}
-      <mesh position={[0, HANGER_Y - ITEM_CENTER_Y, 0]}>
+      <mesh position={[0, WARDROBE_HANGER_Y - WARDROBE_ITEM_Y, 0]}>
         <torusGeometry args={[0.04, 0.006, 8, 16, Math.PI]} />
         <meshStandardMaterial color="#b0b6bc" metalness={0.9} roughness={0.3} />
       </mesh>
-      {/* Hanger triangle (simple cone/horizontal bar) */}
-      <mesh position={[0, HANGER_Y - ITEM_CENTER_Y - 0.12, 0]}>
+      <mesh position={[0, WARDROBE_HANGER_Y - WARDROBE_ITEM_Y - 0.12, 0]}>
         <boxGeometry args={[w * 0.55, 0.015, 0.04]} />
         <meshStandardMaterial color="#0a0a0a" roughness={0.7} />
       </mesh>
-
-      {/* Hover glow */}
       <mesh position={[0, 0, -0.008]}>
         <planeGeometry args={[w + 0.16, h + 0.16]} />
         <meshBasicMaterial color="#ffffff" transparent opacity={isHovered ? 1 : 0} toneMapped={false} />
       </mesh>
-
-      {/* Item plane */}
       <mesh
-        onClick={(e) => {
-          e.stopPropagation();
-          router.push(`/werk/${product.slug}`);
-        }}
-        onPointerOver={(e) => {
-          e.stopPropagation();
-          onHover(product);
-          document.body.style.cursor = 'pointer';
-        }}
-        onPointerOut={() => {
-          onHover(null);
-          document.body.style.cursor = '';
-        }}
+        onClick={(e) => { e.stopPropagation(); router.push(`/werk/${product.slug}`); }}
+        onPointerOver={(e) => { e.stopPropagation(); onHover(product); document.body.style.cursor = 'pointer'; }}
+        onPointerOut={() => { onHover(null); document.body.style.cursor = ''; }}
       >
         <planeGeometry args={[w, h]} />
         <meshBasicMaterial map={texture} toneMapped={false} transparent />
       </mesh>
-
       <pointLight position={[0, h / 2 + 0.3, 0.4]} intensity={0.35} distance={1.8} color="#fff5e8" />
     </group>
   );
 }
 
-// ─── Movement & touch ──────────────────────────────────────────────────────
+// ─── Movement + touch ──────────────────────────────────────────────────────
 
 function Movement({
-  entered, isTouch, touchRefs,
-}: { entered: boolean; isTouch: boolean; touchRefs: TouchRefs }) {
+  entered, isTouch, touchRefs, onRoomChange,
+}: {
+  entered: boolean;
+  isTouch: boolean;
+  touchRefs: TouchRefs;
+  onRoomChange: (r: 'museum' | 'wardrobe') => void;
+}) {
   const { camera } = useThree();
   const keys = useRef<Record<string, boolean>>({});
-  const velocity = useRef(new THREE.Vector3());
   const forward = useRef(new THREE.Vector3());
   const right = useRef(new THREE.Vector3());
   const euler = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
+  const tmpPos = useRef(new THREE.Vector3());
+  const lastRoom = useRef<'museum' | 'wardrobe'>('museum');
 
   useEffect(() => {
     if (isTouch) return;
@@ -529,6 +821,7 @@ function Movement({
 
   useFrame((_, delta) => {
     if (!entered) return;
+
     if (isTouch && (touchRefs.lookX.current !== 0 || touchRefs.lookY.current !== 0)) {
       euler.current.setFromQuaternion(camera.quaternion);
       const s = 0.0028;
@@ -555,18 +848,30 @@ function Movement({
     forward.current.normalize();
     right.current.crossVectors(forward.current, camera.up).normalize();
 
-    velocity.current.set(0, 0, 0);
-    velocity.current.addScaledVector(forward.current, fwd);
-    velocity.current.addScaledVector(right.current, strafe);
-    if (velocity.current.lengthSq() > 0) {
-      const mag = Math.min(1, velocity.current.length());
-      velocity.current.normalize().multiplyScalar(SPEED * delta * mag);
-      camera.position.add(velocity.current);
+    tmpPos.current.set(0, 0, 0);
+    tmpPos.current.addScaledVector(forward.current, fwd);
+    tmpPos.current.addScaledVector(right.current, strafe);
+    if (tmpPos.current.lengthSq() > 0) {
+      const mag = Math.min(1, tmpPos.current.length());
+      tmpPos.current.normalize().multiplyScalar(SPEED * delta * mag);
+
+      // Try X then Z separately for wall sliding
+      const cur = camera.position;
+      const tryX = cur.x + tmpPos.current.x;
+      if (isWalkable(tryX, cur.z)) cur.x = tryX;
+      const tryZ = cur.z + tmpPos.current.z;
+      if (isWalkable(cur.x, tryZ)) cur.z = tryZ;
     }
 
-    camera.position.x = THREE.MathUtils.clamp(camera.position.x, -ROOM_W / 2 + WALL_INSET, ROOM_W / 2 - WALL_INSET);
-    camera.position.z = THREE.MathUtils.clamp(camera.position.z, -ROOM_D / 2 + WALL_INSET, ROOM_D / 2 - WALL_INSET);
     camera.position.y = EYE;
+
+    // Update room
+    const z = camera.position.z;
+    const newRoom: 'museum' | 'wardrobe' = z > MUSEUM_Z_MAX ? 'wardrobe' : 'museum';
+    if (newRoom !== lastRoom.current) {
+      lastRoom.current = newRoom;
+      onRoomChange(newRoom);
+    }
   });
 
   return null;
@@ -583,7 +888,6 @@ function TouchUI({ touchRefs }: { touchRefs: TouchRefs }) {
   useEffect(() => {
     const joy = joyRef.current!;
     const look = lookRef.current!;
-
     function joyCenter() {
       const r = joy.getBoundingClientRect();
       return { cx: r.left + r.width / 2, cy: r.top + r.height / 2, r: r.width / 2 };
@@ -595,8 +899,7 @@ function TouchUI({ touchRefs }: { touchRefs: TouchRefs }) {
       for (const t of Array.from(e.changedTouches)) {
         const el = document.elementFromPoint(t.clientX, t.clientY);
         if (joy.contains(el) && moveTouchId.current === null) {
-          moveTouchId.current = t.identifier;
-          e.preventDefault();
+          moveTouchId.current = t.identifier; e.preventDefault();
         } else if (look.contains(el) && lookTouchId.current === null) {
           lookTouchId.current = t.identifier;
           lookLast.current = { x: t.clientX, y: t.clientY };

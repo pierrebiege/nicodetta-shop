@@ -1,12 +1,10 @@
 import Link from 'next/link';
-import { Wardrobe3D } from '@/components/Wardrobe3D';
-import { DEMO_CLOTHES } from '@/lib/demo-data';
+import { Hall3D } from '@/components/Hall3D';
+import { DEMO_PAINTINGS, DEMO_CLOTHES } from '@/lib/demo-data';
 
 export const dynamic = 'force-static';
 
 export default function WardrobePage() {
-  const items = DEMO_CLOTHES;
-
   return (
     <main className="fixed inset-0 bg-black">
       <Link
@@ -15,10 +13,14 @@ export default function WardrobePage() {
       >
         ← Nicodetta
       </Link>
-      <div className="absolute top-5 right-6 z-40 text-white text-xs uppercase tracking-widest opacity-60">
-        Wardrobe · {items.length} pieces
-      </div>
-      <Wardrobe3D items={items} />
+      <Hall3D
+        paintings={DEMO_PAINTINGS}
+        clothes={DEMO_CLOTHES}
+        spawn={{
+          position: [0, 1.65, 11],
+          lookAt: [0, 1.65, 30],
+        }}
+      />
     </main>
   );
 }

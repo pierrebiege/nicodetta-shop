@@ -1,13 +1,10 @@
 import Link from 'next/link';
-import { Museum3D } from '@/components/Museum3D';
-import { DEMO_PAINTINGS } from '@/lib/demo-data';
+import { Hall3D } from '@/components/Hall3D';
+import { DEMO_PAINTINGS, DEMO_CLOTHES } from '@/lib/demo-data';
 
 export const dynamic = 'force-static';
 
 export default function MuseumPage() {
-  // Hard-coded demo catalog so images always render on Vercel.
-  const paintings = DEMO_PAINTINGS;
-
   return (
     <main className="fixed inset-0 bg-black">
       <Link
@@ -16,10 +13,14 @@ export default function MuseumPage() {
       >
         ← Nicodetta
       </Link>
-      <div className="absolute top-5 right-6 z-40 text-white text-xs uppercase tracking-widest opacity-60">
-        Paintings · {paintings.length} works
-      </div>
-      <Museum3D paintings={paintings} />
+      <Hall3D
+        paintings={DEMO_PAINTINGS}
+        clothes={DEMO_CLOTHES}
+        spawn={{
+          position: [0, 1.65, 6],
+          lookAt: [0, 1.65, -8],
+        }}
+      />
     </main>
   );
 }
