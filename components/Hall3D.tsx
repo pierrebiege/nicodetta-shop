@@ -6,6 +6,12 @@ import { PointerLockControls } from '@react-three/drei';
 import * as THREE from 'three';
 import type { Product } from '@/db/schema';
 import { formatCHF } from '@/lib/format';
+import {
+  allMuseumSlots,
+  allWardrobeSlots,
+  getSlotByKey,
+  type Slot,
+} from '@/lib/slots';
 
 // ─── Layout (one big shared scene) ─────────────────────────────────────────
 //
@@ -97,7 +103,9 @@ export function Hall3D({
   const [isTouch, setIsTouch] = useState(false);
   const [showTutorial, setShowTutorial] = useState(true);
   const [room, setRoom] = useState<'museum' | 'wardrobe'>('museum');
+  const [muted, setMuted] = useState(false);
   const controlsRef = useRef<any>(null);
+  const movingRef = useRef(false);
 
   const touchRefs: TouchRefs = useMemo(
     () => ({ moveX: { current: 0 }, moveY: { current: 0 }, lookX: { current: 0 }, lookY: { current: 0 } }),
@@ -166,6 +174,7 @@ export function Hall3D({
             isTouch={isTouch}
             touchRefs={touchRefs}
             onRoomChange={setRoom}
+            movingRef={movingRef}
           />
         </Suspense>
 
@@ -298,6 +307,20 @@ export function Hall3D({
       )}
 
       {entered && isTouch && <TouchUI touchRefs={touchRefs} />}
+
+      {/* Audio: footsteps + ambient drone */}
+      <GameAudio entered={entered} movingRef={movingRef} muted={muted} />
+
+      {/* Mute toggle */}
+      {entered && (
+        <button
+          onClick={() => setMuted((m) => !m)}
+          className={`fixed bottom-5 ${isTouch ? 'right-5' : 'right-6'} z-30 w-10 h-10 bg-white/70 text-ink backdrop-blur-sm flex items-center justify-center text-xs uppercase tracking-widest font-bold`}
+          aria-label={muted ? 'Unmute' : 'Mute'}
+        >
+          {muted ? '🔇' : '🔊'}
+        </button>
+      )}
 
       {/* Persistent room indicator */}
       {entered && (
@@ -565,15 +588,15 @@ function LedStrip({
 function Paintings({
   paintings, hovered, onHover,
 }: { paintings: Product[]; hovered: Product | null; onHover: (p: Product | null) => void }) {
-  const slots = useMemo(() => buildPaintingSlots(paintings.length), [paintings.length]);
+  const placements = useMemo(() => assignSlots(paintings, allMuseumSlots()), [paintings]);
   return (
     <>
-      {paintings.map((p, i) => (
+      {placements.map(({ product, slot }) => (
         <Painting
-          key={p.id}
-          product={p}
-          slot={slots[i % slots.length]}
-          isHovered={hovered?.id === p.id}
+          key={product.id}
+          product={product}
+          slot={slot}
+          isHovered={hovered?.id === product.id}
           onHover={onHover}
         />
       ))}
@@ -581,49 +604,37 @@ function Paintings({
   );
 }
 
-function buildPaintingSlots(count: number) {
-  // 12 paintings: back(4) + left(3) + right(3) + front-left(1) + front-right(1) = 12
-  // Front wall has doorway in centre, so place 1 painting on each side of it
-  const slots: { position: [number, number, number]; rotation: [number, number, number] }[] = [];
-  const offWall = 0.02;
-  // Back wall (z=MUSEUM_Z_MIN, faces +z)
-  for (let i = 0; i < 4; i++) {
-    slots.push({
-      position: [((i + 0.5) / 4 - 0.5) * (MUSEUM_W - 1.5), PAINTING_CENTER_Y, MUSEUM_Z_MIN + offWall],
-      rotation: [0, 0, 0],
-    });
+function assignSlots(items: Product[], slots: Slot[]): { product: Product; slot: Slot }[] {
+  // Honour each product's wallSlot first; spill unplaced items into remaining slots.
+  const used = new Set<string>();
+  const placed: { product: Product; slot: Slot }[] = [];
+  const overflow: Product[] = [];
+  for (const p of items) {
+    if (p.wallSlot) {
+      const s = getSlotByKey(p.wallSlot);
+      if (s && !used.has(s.key)) {
+        used.add(s.key);
+        placed.push({ product: p, slot: s });
+        continue;
+      }
+    }
+    overflow.push(p);
   }
-  // Left wall (x=MUSEUM_X_MIN, faces +x)
-  for (let i = 0; i < 3; i++) {
-    slots.push({
-      position: [MUSEUM_X_MIN + offWall, PAINTING_CENTER_Y, ((i + 0.5) / 3 - 0.5) * (MUSEUM_D - 2)],
-      rotation: [0, Math.PI / 2, 0],
-    });
+  const free = slots.filter((s) => !used.has(s.key));
+  let i = 0;
+  for (const p of overflow) {
+    const s = free[i++];
+    if (!s) break;
+    placed.push({ product: p, slot: s });
   }
-  // Right wall (x=MUSEUM_X_MAX, faces -x)
-  for (let i = 0; i < 3; i++) {
-    slots.push({
-      position: [MUSEUM_X_MAX - offWall, PAINTING_CENTER_Y, ((i + 0.5) / 3 - 0.5) * (MUSEUM_D - 2)],
-      rotation: [0, -Math.PI / 2, 0],
-    });
-  }
-  // Front wall — left and right of doorway
-  slots.push({
-    position: [(MUSEUM_X_MIN + DOORWAY_X_MIN) / 2, PAINTING_CENTER_Y, MUSEUM_Z_MAX - offWall],
-    rotation: [0, Math.PI, 0],
-  });
-  slots.push({
-    position: [(MUSEUM_X_MAX + DOORWAY_X_MAX) / 2, PAINTING_CENTER_Y, MUSEUM_Z_MAX - offWall],
-    rotation: [0, Math.PI, 0],
-  });
-  return slots.slice(0, count);
+  return placed;
 }
 
 function Painting({
   product, slot, isHovered, onHover,
 }: {
   product: Product;
-  slot: { position: [number, number, number]; rotation: [number, number, number] };
+  slot: Slot;
   isHovered: boolean;
   onHover: (p: Product | null) => void;
 }) {
@@ -665,15 +676,15 @@ function Painting({
 function ClothingRack({
   items, hovered, onHover,
 }: { items: Product[]; hovered: Product | null; onHover: (p: Product | null) => void }) {
-  const slots = useMemo(() => buildHangingSlots(items.length), [items.length]);
+  const placements = useMemo(() => assignSlots(items, allWardrobeSlots()), [items]);
   return (
     <>
-      {items.map((p, i) => (
+      {placements.map(({ product, slot }) => (
         <HangingItem
-          key={p.id}
-          product={p}
-          slot={slots[i % slots.length]}
-          isHovered={hovered?.id === p.id}
+          key={product.id}
+          product={product}
+          slot={slot}
+          isHovered={hovered?.id === product.id}
           onHover={onHover}
         />
       ))}
@@ -681,33 +692,11 @@ function ClothingRack({
   );
 }
 
-function buildHangingSlots(count: number) {
-  const slots: { position: [number, number, number]; rotation: [number, number, number] }[] = [];
-  const per = Math.ceil(count / 2);
-  const cz = (WARDROBE_Z_MIN + WARDROBE_Z_MAX) / 2;
-  const railLen = WARDROBE_D - 4;
-  for (let i = 0; i < per; i++) {
-    const z = cz + ((i + 0.5) / per - 0.5) * railLen;
-    slots.push({
-      position: [-WARDROBE_RAIL_X + 0.1, WARDROBE_ITEM_Y, z],
-      rotation: [0, Math.PI / 2, 0],
-    });
-  }
-  for (let i = 0; i < per; i++) {
-    const z = cz + ((i + 0.5) / per - 0.5) * railLen;
-    slots.push({
-      position: [WARDROBE_RAIL_X - 0.1, WARDROBE_ITEM_Y, z],
-      rotation: [0, -Math.PI / 2, 0],
-    });
-  }
-  return slots.slice(0, count);
-}
-
 function HangingItem({
   product, slot, isHovered, onHover,
 }: {
   product: Product;
-  slot: { position: [number, number, number]; rotation: [number, number, number] };
+  slot: Slot;
   isHovered: boolean;
   onHover: (p: Product | null) => void;
 }) {
@@ -757,12 +746,13 @@ function HangingItem({
 // ─── Movement + touch ──────────────────────────────────────────────────────
 
 function Movement({
-  entered, isTouch, touchRefs, onRoomChange,
+  entered, isTouch, touchRefs, onRoomChange, movingRef,
 }: {
   entered: boolean;
   isTouch: boolean;
   touchRefs: TouchRefs;
   onRoomChange: (r: 'museum' | 'wardrobe') => void;
+  movingRef: { current: boolean };
 }) {
   const { camera } = useThree();
   const keys = useRef<Record<string, boolean>>({});
@@ -816,7 +806,9 @@ function Movement({
     tmpPos.current.set(0, 0, 0);
     tmpPos.current.addScaledVector(forward.current, fwd);
     tmpPos.current.addScaledVector(right.current, strafe);
-    if (tmpPos.current.lengthSq() > 0) {
+    const isMoving = tmpPos.current.lengthSq() > 0;
+    movingRef.current = isMoving;
+    if (isMoving) {
       const mag = Math.min(1, tmpPos.current.length());
       tmpPos.current.normalize().multiplyScalar(SPEED * delta * mag);
 
@@ -840,6 +832,125 @@ function Movement({
   });
 
   return null;
+}
+
+// ─── Procedural audio (footsteps + ambient) ────────────────────────────────
+
+function GameAudio({
+  entered,
+  movingRef,
+  muted,
+}: {
+  entered: boolean;
+  movingRef: { current: boolean };
+  muted: boolean;
+}) {
+  const ctxRef = useRef<AudioContext | null>(null);
+  const masterRef = useRef<GainNode | null>(null);
+  const ambientNodesRef = useRef<AudioNode[]>([]);
+  const lastStepRef = useRef(0);
+
+  // Lazily create AudioContext when the player enters (user gesture)
+  useEffect(() => {
+    if (!entered) return;
+    if (typeof window === 'undefined') return;
+    if (ctxRef.current) return;
+
+    const AC = (window.AudioContext || (window as any).webkitAudioContext) as
+      | typeof AudioContext
+      | undefined;
+    if (!AC) return;
+    const ctx = new AC();
+    ctxRef.current = ctx;
+
+    const master = ctx.createGain();
+    master.gain.value = 1;
+    master.connect(ctx.destination);
+    masterRef.current = master;
+
+    // Ambient drone: two stacked low oscillators with slight detune + slow LFO
+    const osc1 = ctx.createOscillator();
+    osc1.type = 'sine';
+    osc1.frequency.value = 55;
+    const osc2 = ctx.createOscillator();
+    osc2.type = 'sine';
+    osc2.frequency.value = 82;
+    osc2.detune.value = -6;
+    const ambGain = ctx.createGain();
+    ambGain.gain.value = 0.045;
+
+    // Slow gain LFO so it breathes
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = 0.07;
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 0.02;
+    lfo.connect(lfoGain).connect(ambGain.gain);
+
+    osc1.connect(ambGain);
+    osc2.connect(ambGain);
+    ambGain.connect(master);
+
+    osc1.start();
+    osc2.start();
+    lfo.start();
+    ambientNodesRef.current = [osc1, osc2, ambGain, lfo, lfoGain];
+  }, [entered]);
+
+  // Mute control
+  useEffect(() => {
+    const m = masterRef.current;
+    if (!m) return;
+    m.gain.setTargetAtTime(muted ? 0 : 1, m.context.currentTime, 0.1);
+  }, [muted]);
+
+  // Footstep ticker
+  useEffect(() => {
+    if (!entered) return;
+    let raf: number;
+    const STEP_INTERVAL = 430; // ms between footsteps
+
+    function loop() {
+      const ctx = ctxRef.current;
+      if (ctx && movingRef.current && !muted) {
+        const now = performance.now();
+        if (now - lastStepRef.current > STEP_INTERVAL) {
+          lastStepRef.current = now;
+          playFootstep(ctx, masterRef.current);
+        }
+      }
+      raf = requestAnimationFrame(loop);
+    }
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [entered, movingRef, muted]);
+
+  return null;
+}
+
+function playFootstep(ctx: AudioContext, master: GainNode | null) {
+  const dur = 0.18;
+  const sampleRate = ctx.sampleRate;
+  const buf = ctx.createBuffer(1, Math.floor(sampleRate * dur), sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) {
+    const t = i / data.length;
+    // Sharp attack, exponential decay, slight low-frequency thump
+    const noise = Math.random() * 2 - 1;
+    const env = Math.pow(1 - t, 3);
+    data[i] = noise * env;
+  }
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 320;
+  filter.Q.value = 0.6;
+  const gain = ctx.createGain();
+  gain.gain.value = 0.13 + Math.random() * 0.05;
+  src.connect(filter).connect(gain).connect(master ?? ctx.destination);
+  src.start();
+  src.stop(ctx.currentTime + dur + 0.02);
 }
 
 function TouchUI({ touchRefs }: { touchRefs: TouchRefs }) {

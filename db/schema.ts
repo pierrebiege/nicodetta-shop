@@ -16,6 +16,9 @@ export const products = sqliteTable('products', {
   status: text('status', { enum: ['available', 'reserved', 'sold'] })
     .notNull()
     .default('available'),
+  // Slot key for the museum/wardrobe layout, e.g. "museum:back:0", "wardrobe:left:2".
+  // Null = unplaced (renders in any free slot).
+  wallSlot: text('wall_slot'),
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
     .default(sql`(unixepoch())`),

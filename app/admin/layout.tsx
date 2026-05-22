@@ -14,20 +14,19 @@ export default async function AdminLayout({
       <header className="flex items-center justify-between border-b border-ink bg-paper px-6 py-4">
         <Link
           href="/admin"
-          className="font-display font-black text-lg uppercase tracking-tight"
+          className="font-serif text-2xl"
         >
           Nicodetta · Admin
         </Link>
         <nav className="flex items-center gap-6 text-xs uppercase tracking-widest">
           {admin && (
             <>
-              <Link href="/admin/products">Werke</Link>
-              <Link href="/admin/orders">Bestellungen</Link>
+              <Link href="/admin/products">Pieces</Link>
+              <Link href="/admin/museum">Layout</Link>
+              <Link href="/admin/orders">Orders</Link>
               <span className="opacity-50">{admin.username}</span>
               <form action="/api/admin/logout" method="post">
-                <button type="submit" className="underline">
-                  Logout
-                </button>
+                <button type="submit" className="underline">Logout</button>
               </form>
             </>
           )}

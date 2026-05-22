@@ -12,21 +12,18 @@ export async function PATCH(req: Request, { params }: Ctx) {
   }
   const { id } = await params;
   const body = await req.json();
+  const update: Record<string, unknown> = {};
+  if (body.type !== undefined) update.type = body.type;
+  if (body.title !== undefined) update.title = body.title;
+  if (body.description !== undefined) update.description = body.description;
+  if (body.priceRappen !== undefined) update.priceRappen = body.priceRappen;
+  if (body.imagePath !== undefined) update.imagePath = body.imagePath;
+  if (body.status !== undefined) update.status = body.status;
+  if (body.wallSlot !== undefined) update.wallSlot = body.wallSlot;
+
   const [updated] = await db
     .update(products)
-    .set({
-      slug: body.slug,
-      type: body.type,
-      title: body.title,
-      description: body.description,
-      priceRappen: body.priceRappen,
-      imagePath: body.imagePath,
-      width: body.width ?? null,
-      height: body.height ?? null,
-      year: body.year ?? null,
-      technique: body.technique ?? null,
-      status: body.status,
-    })
+    .set(update)
     .where(eq(products.id, Number(id)))
     .returning();
   if (!updated) return NextResponse.json({ error: 'not found' }, { status: 404 });

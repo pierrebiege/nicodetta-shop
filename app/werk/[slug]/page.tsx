@@ -15,7 +15,6 @@ type Props = { params: Promise<{ slug: string }> };
 export default async function WorkDetail({ params }: Props) {
   const { slug } = await params;
 
-  // Try DB first, fall back to hardcoded demo catalog
   let product = null;
   try {
     const [row] = await db.select().from(products).where(eq(products.slug, slug));
@@ -32,9 +31,7 @@ export default async function WorkDetail({ params }: Props) {
   return (
     <main className="min-h-screen">
       <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 md:px-10 py-5 mix-blend-difference text-white">
-        <Link href="/" className="font-serif text-xl">
-          Nicodetta
-        </Link>
+        <Link href="/" className="font-serif text-xl">Nicodetta</Link>
         <Link href={back} className="text-xs uppercase tracking-widest font-medium">
           ← {backLabel}
         </Link>
@@ -55,41 +52,13 @@ export default async function WorkDetail({ params }: Props) {
         </div>
 
         <aside className="col-span-12 md:col-span-4 p-6 md:p-10 md:pt-24 flex flex-col gap-8 border-l border-ink">
-          <div>
-            <p className="text-xs uppercase tracking-widest opacity-60">
-              {product.type === 'painting' ? 'Painting' : 'Garment'} · {product.year ?? '—'}
-            </p>
-            <h1 className="font-serif text-4xl md:text-5xl leading-[0.95] mt-2">
-              {product.title}
-            </h1>
-          </div>
+          <h1 className="font-serif text-4xl md:text-5xl leading-[0.95]">
+            {product.title}
+          </h1>
 
-          <div className="text-sm leading-relaxed whitespace-pre-line">
+          <div className="text-sm leading-relaxed whitespace-pre-line opacity-90">
             {product.description}
           </div>
-
-          <dl className="grid grid-cols-2 gap-y-2 text-xs uppercase tracking-widest border-t border-ink pt-4">
-            {product.technique && (
-              <>
-                <dt className="opacity-60">Technique</dt>
-                <dd>{product.technique}</dd>
-              </>
-            )}
-            {product.width && product.height && (
-              <>
-                <dt className="opacity-60">Size</dt>
-                <dd>{product.width} × {product.height} cm</dd>
-              </>
-            )}
-            <dt className="opacity-60">Edition</dt>
-            <dd>One of one</dd>
-            <dt className="opacity-60">Status</dt>
-            <dd className="font-bold">
-              {product.status === 'available' && 'Available'}
-              {product.status === 'reserved' && 'Reserved'}
-              {product.status === 'sold' && 'Sold'}
-            </dd>
-          </dl>
 
           <div className="flex items-baseline justify-between border-t border-ink pt-4">
             <span className="text-xs uppercase tracking-widest opacity-60">Price</span>
@@ -101,8 +70,8 @@ export default async function WorkDetail({ params }: Props) {
           ) : (
             <div className="border border-ink p-4 text-sm">
               {product.status === 'sold'
-                ? 'This piece is sold. Reach out if you want something similar.'
-                : 'This piece is currently reserved. Check back later.'}
+                ? 'This piece is sold.'
+                : 'This piece is currently reserved.'}
             </div>
           )}
         </aside>

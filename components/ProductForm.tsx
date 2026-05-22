@@ -14,7 +14,7 @@ export function ProductForm({ product }: { product?: Product }) {
     const fd = new FormData();
     fd.append('file', file);
     const res = await fetch('/api/admin/upload', { method: 'POST', body: fd });
-    if (!res.ok) throw new Error('Upload fehlgeschlagen');
+    if (!res.ok) throw new Error('Upload failed');
     const { path } = await res.json();
     return path as string;
   }
@@ -31,13 +31,13 @@ export function ProductForm({ product }: { product?: Product }) {
         path = await uploadImage(file);
         setImagePath(path);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Fehler');
+        setError(err instanceof Error ? err.message : 'Error');
         setLoading(false);
         return;
       }
     }
     if (!path) {
-      setError('Bild fehlt');
+      setError('Image required');
       setLoading(false);
       return;
     }
@@ -45,15 +45,10 @@ export function ProductForm({ product }: { product?: Product }) {
     const payload = {
       type: fd.get('type'),
       title: fd.get('title'),
-      slug: fd.get('slug'),
       description: fd.get('description'),
       priceRappen: Math.round(Number(fd.get('priceChf')) * 100),
       imagePath: path,
-      width: fd.get('width') ? Number(fd.get('width')) : null,
-      height: fd.get('height') ? Number(fd.get('height')) : null,
-      year: fd.get('year') ? Number(fd.get('year')) : null,
-      technique: fd.get('technique') || null,
-      status: fd.get('status'),
+      status: fd.get('status') || 'available',
     };
 
     const url = product ? `/api/admin/products/${product.id}` : '/api/admin/products';
@@ -65,7 +60,7 @@ export function ProductForm({ product }: { product?: Product }) {
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      setError(body.error ?? 'Speichern fehlgeschlagen');
+      setError(body.error ?? 'Save failed');
       setLoading(false);
       return;
     }
@@ -75,7 +70,7 @@ export function ProductForm({ product }: { product?: Product }) {
 
   async function handleDelete() {
     if (!product) return;
-    if (!confirm('Werk wirklich löschen?')) return;
+    if (!confirm('Delete this piece?')) return;
     const res = await fetch(`/api/admin/products/${product.id}`, { method: 'DELETE' });
     if (res.ok) {
       router.push('/admin/products');
@@ -87,13 +82,11 @@ export function ProductForm({ product }: { product?: Product }) {
     <form onSubmit={handleSubmit} className="grid grid-cols-12 gap-6">
       <div className="col-span-12 md:col-span-5">
         <div className="relative aspect-[4/5] bg-muted border border-ink">
-          {imagePath && (
-            <Image src={imagePath} alt="Vorschau" fill className="object-contain" />
-          )}
+          {imagePath && <Image src={imagePath} alt="Preview" fill className="object-contain" />}
         </div>
         <label className="block mt-3">
           <span className="text-[10px] uppercase tracking-widest opacity-60">
-            Bild {imagePath ? '(ersetzen)' : 'hochladen'}
+            Image {imagePath ? '(replace)' : '(upload)'}
           </span>
           <input
             type="file"
@@ -105,46 +98,22 @@ export function ProductForm({ product }: { product?: Product }) {
       </div>
 
       <div className="col-span-12 md:col-span-7 space-y-4">
-        <Field name="title" label="Titel" defaultValue={product?.title} required />
-        <Field
-          name="slug"
-          label="Slug (URL-Pfad)"
-          defaultValue={product?.slug}
-          required
-        />
-        <div className="grid grid-cols-2 gap-4">
-          <label className="flex flex-col gap-1">
-            <span className="text-[10px] uppercase tracking-widest opacity-60">
-              Typ
-            </span>
-            <select
-              name="type"
-              defaultValue={product?.type ?? 'painting'}
-              className="border border-ink px-3 py-2 text-sm bg-paper"
-            >
-              <option value="painting">Bild</option>
-              <option value="clothing">Kleidung</option>
-            </select>
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-[10px] uppercase tracking-widest opacity-60">
-              Status
-            </span>
-            <select
-              name="status"
-              defaultValue={product?.status ?? 'available'}
-              className="border border-ink px-3 py-2 text-sm bg-paper"
-            >
-              <option value="available">Verfügbar</option>
-              <option value="reserved">Reserviert</option>
-              <option value="sold">Verkauft</option>
-            </select>
-          </label>
-        </div>
         <label className="flex flex-col gap-1">
-          <span className="text-[10px] uppercase tracking-widest opacity-60">
-            Beschreibung
-          </span>
+          <span className="text-[10px] uppercase tracking-widest opacity-60">Type</span>
+          <select
+            name="type"
+            defaultValue={product?.type ?? 'painting'}
+            className="border border-ink px-3 py-2 text-sm bg-paper"
+          >
+            <option value="painting">Painting</option>
+            <option value="clothing">Clothing</option>
+          </select>
+        </label>
+
+        <Field name="title" label="Title" defaultValue={product?.title} required />
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] uppercase tracking-widest opacity-60">Description</span>
           <textarea
             name="description"
             defaultValue={product?.description}
@@ -153,41 +122,30 @@ export function ProductForm({ product }: { product?: Product }) {
             className="border border-ink px-3 py-2 text-sm bg-paper"
           />
         </label>
-        <div className="grid grid-cols-3 gap-4">
-          <Field
-            name="priceChf"
-            label="Preis CHF"
-            type="number"
-            defaultValue={product ? (product.priceRappen / 100).toString() : ''}
-            required
-            step="1"
-          />
-          <Field
-            name="year"
-            label="Jahr"
-            type="number"
-            defaultValue={product?.year?.toString() ?? ''}
-          />
-          <Field
-            name="technique"
-            label="Technik"
-            defaultValue={product?.technique ?? ''}
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <Field
-            name="width"
-            label="Breite cm"
-            type="number"
-            defaultValue={product?.width?.toString() ?? ''}
-          />
-          <Field
-            name="height"
-            label="Höhe cm"
-            type="number"
-            defaultValue={product?.height?.toString() ?? ''}
-          />
-        </div>
+
+        <Field
+          name="priceChf"
+          label="Price (CHF)"
+          type="number"
+          defaultValue={product ? (product.priceRappen / 100).toString() : ''}
+          required
+          step="1"
+        />
+
+        {product && (
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] uppercase tracking-widest opacity-60">Status</span>
+            <select
+              name="status"
+              defaultValue={product.status}
+              className="border border-ink px-3 py-2 text-sm bg-paper"
+            >
+              <option value="available">Available</option>
+              <option value="reserved">Reserved</option>
+              <option value="sold">Sold</option>
+            </select>
+          </label>
+        )}
 
         {error && <div className="text-accent text-sm">{error}</div>}
 
@@ -197,7 +155,7 @@ export function ProductForm({ product }: { product?: Product }) {
             disabled={loading}
             className="bg-ink text-paper px-6 py-3 text-xs uppercase tracking-widest font-bold disabled:opacity-50"
           >
-            {loading ? '…' : 'Speichern'}
+            {loading ? '…' : 'Save'}
           </button>
           {product && (
             <button
@@ -205,7 +163,7 @@ export function ProductForm({ product }: { product?: Product }) {
               onClick={handleDelete}
               className="border border-ink px-6 py-3 text-xs uppercase tracking-widest hover:bg-accent hover:text-paper hover:border-accent"
             >
-              Löschen
+              Delete
             </button>
           )}
         </div>
@@ -215,25 +173,13 @@ export function ProductForm({ product }: { product?: Product }) {
 }
 
 function Field({
-  name,
-  label,
-  type = 'text',
-  required,
-  defaultValue,
-  step,
+  name, label, type = 'text', required, defaultValue, step,
 }: {
-  name: string;
-  label: string;
-  type?: string;
-  required?: boolean;
-  defaultValue?: string;
-  step?: string;
+  name: string; label: string; type?: string; required?: boolean; defaultValue?: string; step?: string;
 }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-[10px] uppercase tracking-widest opacity-60">
-        {label}
-      </span>
+      <span className="text-[10px] uppercase tracking-widest opacity-60">{label}</span>
       <input
         name={name}
         type={type}
