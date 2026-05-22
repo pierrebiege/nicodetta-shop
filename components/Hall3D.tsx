@@ -419,11 +419,6 @@ function MuseumRoom() {
       {/* Front ceiling line (split around doorway is fine to leave full, it's high up) */}
       <LedStrip from={[MUSEUM_X_MIN, ROOM_H - 0.03, MUSEUM_Z_MAX - 0.02]} to={[MUSEUM_X_MAX, ROOM_H - 0.03, MUSEUM_Z_MAX - 0.02]} />
 
-      {/* Floor LED accents */}
-      <LedStrip from={[MUSEUM_X_MIN, 0.03, MUSEUM_Z_MIN + 0.02]} to={[MUSEUM_X_MAX, 0.03, MUSEUM_Z_MIN + 0.02]} accent />
-      <LedStrip from={[MUSEUM_X_MIN + 0.02, 0.03, MUSEUM_Z_MIN]} to={[MUSEUM_X_MIN + 0.02, 0.03, MUSEUM_Z_MAX]} accent />
-      <LedStrip from={[MUSEUM_X_MAX - 0.02, 0.03, MUSEUM_Z_MIN]} to={[MUSEUM_X_MAX - 0.02, 0.03, MUSEUM_Z_MAX]} accent />
-
       {/* Ceiling fill lights */}
       {[[-6,-4],[6,-4],[-6,4],[6,4]].map(([x, z]) => (
         <pointLight key={`${x},${z}`} position={[x, ROOM_H - 0.3, z]} intensity={0.55} distance={10} color="#ffffff" />
@@ -510,11 +505,6 @@ function WardrobeRoom() {
       <LedStrip from={[WARDROBE_X_MIN + 0.02, ROOM_H - 0.03, WARDROBE_Z_MIN]} to={[WARDROBE_X_MIN + 0.02, ROOM_H - 0.03, WARDROBE_Z_MAX]} />
       <LedStrip from={[WARDROBE_X_MAX - 0.02, ROOM_H - 0.03, WARDROBE_Z_MIN]} to={[WARDROBE_X_MAX - 0.02, ROOM_H - 0.03, WARDROBE_Z_MAX]} />
 
-      {/* Floor LED accents */}
-      <LedStrip from={[WARDROBE_X_MIN, 0.03, WARDROBE_Z_MAX - 0.02]} to={[WARDROBE_X_MAX, 0.03, WARDROBE_Z_MAX - 0.02]} accent />
-      <LedStrip from={[WARDROBE_X_MIN + 0.02, 0.03, WARDROBE_Z_MIN]} to={[WARDROBE_X_MIN + 0.02, 0.03, WARDROBE_Z_MAX]} accent />
-      <LedStrip from={[WARDROBE_X_MAX - 0.02, 0.03, WARDROBE_Z_MIN]} to={[WARDROBE_X_MAX - 0.02, 0.03, WARDROBE_Z_MAX]} accent />
-
       {/* Ceiling fill lights along the corridor */}
       {[12, 17, 22, 27].map((z) => (
         <pointLight key={z} position={[0, ROOM_H - 0.3, z]} intensity={0.55} distance={9} color="#ffffff" />
@@ -526,31 +516,10 @@ function WardrobeRoom() {
 // ─── Doorway frame + signage ───────────────────────────────────────────────
 
 function Doorway() {
-  // A subtle dark frame around the opening for visibility, plus glow lights
-  const frameDepth = 0.08;
-  const frameWidth = 0.06;
+  // Pure opening — no frame, no floor stripe. Just two soft accent lights
+  // so the threshold is naturally lit from both sides.
   return (
     <group position={[0, 0, MUSEUM_Z_MAX]}>
-      {/* Top lintel */}
-      <mesh position={[0, DOORWAY_H, 0]}>
-        <boxGeometry args={[DOORWAY_W + 0.4, frameWidth, frameDepth * 2]} />
-        <meshStandardMaterial color="#0a0a0a" />
-      </mesh>
-      {/* Side jambs */}
-      <mesh position={[DOORWAY_X_MIN, DOORWAY_H / 2, 0]}>
-        <boxGeometry args={[frameWidth, DOORWAY_H, frameDepth * 2]} />
-        <meshStandardMaterial color="#0a0a0a" />
-      </mesh>
-      <mesh position={[DOORWAY_X_MAX, DOORWAY_H / 2, 0]}>
-        <boxGeometry args={[frameWidth, DOORWAY_H, frameDepth * 2]} />
-        <meshStandardMaterial color="#0a0a0a" />
-      </mesh>
-      {/* Floor strip under the doorway */}
-      <mesh position={[0, 0.005, 0]}>
-        <boxGeometry args={[DOORWAY_W, 0.01, 0.3]} />
-        <meshBasicMaterial color="#8fc1ff" toneMapped={false} />
-      </mesh>
-      {/* Doorway accent lights */}
       <pointLight position={[0, DOORWAY_H - 0.2, -0.5]} intensity={0.5} distance={3} color="#ffe8c0" />
       <pointLight position={[0, DOORWAY_H - 0.2, 0.5]} intensity={0.5} distance={3} color="#ffe8c0" />
     </group>
@@ -677,10 +646,6 @@ function Painting({
       <mesh position={[0, 0, -0.008]}>
         <planeGeometry args={[w + 0.12, h + 0.12]} />
         <meshBasicMaterial color="#ffffff" transparent opacity={isHovered ? 1 : 0} toneMapped={false} />
-      </mesh>
-      <mesh position={[0, 0, -0.004]}>
-        <planeGeometry args={[w + 0.05, h + 0.05]} />
-        <meshBasicMaterial color="#0a0a0a" toneMapped={false} />
       </mesh>
       <mesh
         onClick={(e) => { e.stopPropagation(); router.push(`/werk/${product.slug}`); }}
