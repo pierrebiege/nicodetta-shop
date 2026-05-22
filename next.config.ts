@@ -1,7 +1,12 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['better-sqlite3', 'pdfkit', 'swissqrbill'],
+  serverExternalPackages: ['pdfkit', 'swissqrbill'],
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: '*.public.blob.vercel-storage.com' },
+    ],
+  },
 };
 
 export default nextConfig;

@@ -1,29 +1,20 @@
-import Database from 'better-sqlite3';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { drizzle } from 'drizzle-orm/libsql';
+import { createClient } from '@libsql/client';
 import * as schema from './schema';
 import path from 'node:path';
-import fs from 'node:fs';
 
-// On Vercel the deployment dir is read-only — copy the seeded DB to /tmp on boot.
-// Locally we just use ./nicodetta.db.
-function resolveDbPath() {
-  if (process.env.DB_PATH) return process.env.DB_PATH;
-  if (process.env.VERCEL) {
-    const target = '/tmp/nicodetta.db';
-    if (!fs.existsSync(target)) {
-      const seed = path.join(process.cwd(), 'nicodetta.db');
-      if (fs.existsSync(seed)) {
-        fs.copyFileSync(seed, target);
-      }
-    }
-    return target;
+// If TURSO_DATABASE_URL is set, use the hosted libSQL database.
+// Otherwise fall back to a local file (./nicodetta.db) for offline dev.
+function makeClient() {
+  const url = process.env.TURSO_DATABASE_URL;
+  const token = process.env.TURSO_AUTH_TOKEN;
+  if (url) {
+    return createClient({ url, authToken: token });
   }
-  return path.join(process.cwd(), 'nicodetta.db');
+  const localFile = process.env.DB_PATH ?? path.join(process.cwd(), 'nicodetta.db');
+  return createClient({ url: `file:${localFile}` });
 }
 
-const sqlite = new Database(resolveDbPath());
-sqlite.pragma('journal_mode = WAL');
-sqlite.pragma('foreign_keys = ON');
-
-export const db = drizzle(sqlite, { schema });
+const client = makeClient();
+export const db = drizzle(client, { schema });
 export { schema };

@@ -1,10 +1,29 @@
 import Link from 'next/link';
 import { Hall3D } from '@/components/Hall3D';
 import { DEMO_PAINTINGS, DEMO_CLOTHES } from '@/lib/demo-data';
+import { db } from '@/db';
+import { products } from '@/db/schema';
+import { eq, asc } from 'drizzle-orm';
 
-export const dynamic = 'force-static';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
-export default function MuseumPage() {
+async function loadCatalog() {
+  try {
+    const all = await db.select().from(products).orderBy(asc(products.id));
+    const paintings = all.filter((p) => p.type === 'painting');
+    const clothes = all.filter((p) => p.type === 'clothing');
+    if (paintings.length === 0 && clothes.length === 0) {
+      return { paintings: DEMO_PAINTINGS, clothes: DEMO_CLOTHES };
+    }
+    return { paintings, clothes };
+  } catch {
+    return { paintings: DEMO_PAINTINGS, clothes: DEMO_CLOTHES };
+  }
+}
+
+export default async function MuseumPage() {
+  const { paintings, clothes } = await loadCatalog();
   return (
     <main className="fixed inset-0 bg-black">
       <Link
@@ -14,12 +33,9 @@ export default function MuseumPage() {
         ← Nicodetta
       </Link>
       <Hall3D
-        paintings={DEMO_PAINTINGS}
-        clothes={DEMO_CLOTHES}
-        spawn={{
-          position: [0, 1.65, 6],
-          lookAt: [0, 1.65, -8],
-        }}
+        paintings={paintings}
+        clothes={clothes}
+        spawn={{ position: [0, 1.65, 6], lookAt: [0, 1.65, -8] }}
       />
     </main>
   );
