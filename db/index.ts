@@ -6,8 +6,8 @@ import path from 'node:path';
 // If TURSO_DATABASE_URL is set, use the hosted libSQL database.
 // Otherwise fall back to a local file (./nicodetta.db) for offline dev.
 function makeClient() {
-  const url = process.env.TURSO_DATABASE_URL;
-  const token = process.env.TURSO_AUTH_TOKEN;
+  const url = process.env.TURSO_DATABASE_URL?.trim();
+  const token = process.env.TURSO_AUTH_TOKEN?.trim();
   if (url) {
     return createClient({ url, authToken: token });
   }
