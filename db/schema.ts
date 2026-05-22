@@ -1,4 +1,4 @@
-import { sqliteTable, integer, text } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, integer, text, real } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 export const products = sqliteTable('products', {
@@ -16,9 +16,18 @@ export const products = sqliteTable('products', {
   status: text('status', { enum: ['available', 'reserved', 'sold'] })
     .notNull()
     .default('available'),
-  // Slot key for the museum/wardrobe layout, e.g. "museum:back:0", "wardrobe:left:2".
-  // Null = unplaced (renders in any free slot).
+  // Wardrobe still uses slot positioning ("wardrobe:left:2" etc.).
+  // Museum paintings use the free-placement columns below; wallSlot can be
+  // kept around as a "where this used to live" hint but isn't used in 3D
+  // for paintings when wall + wallX/Y/W/H is present.
   wallSlot: text('wall_slot'),
+  // Free placement on a museum wall (or any wall). All in metres.
+  // wall = "museum:back" | "museum:left" | "museum:right" | "museum:front-left" | "museum:front-right"
+  wall: text('wall'),
+  wallX: real('wall_x'),
+  wallY: real('wall_y'),
+  wallW: real('wall_w'),
+  wallH: real('wall_h'),
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
     .default(sql`(unixepoch())`),

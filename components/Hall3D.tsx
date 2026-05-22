@@ -10,6 +10,7 @@ import {
   allMuseumSlots,
   allWardrobeSlots,
   getSlotByKey,
+  placementToWorld,
   type Slot,
 } from '@/lib/slots';
 
@@ -588,10 +589,24 @@ function LedStrip({
 function Paintings({
   paintings, hovered, onHover,
 }: { paintings: Product[]; hovered: Product | null; onHover: (p: Product | null) => void }) {
-  const placements = useMemo(() => assignSlots(paintings, allMuseumSlots()), [paintings]);
+  // Two groups:
+  //  - Free-placed (wall + wallX/Y/W/H all set) → rendered at their exact placement
+  //  - Slot-placed (legacy) → auto-assigned to a slot
+  const free = useMemo(() => paintings.filter(isFreePlaced), [paintings]);
+  const slotted = useMemo(() => paintings.filter((p) => !isFreePlaced(p)), [paintings]);
+  const slotPlacements = useMemo(() => assignSlots(slotted, allMuseumSlots()), [slotted]);
+
   return (
     <>
-      {placements.map(({ product, slot }) => (
+      {free.map((p) => (
+        <PaintingFree
+          key={p.id}
+          product={p}
+          isHovered={hovered?.id === p.id}
+          onHover={onHover}
+        />
+      ))}
+      {slotPlacements.map(({ product, slot }) => (
         <Painting
           key={product.id}
           product={product}
@@ -601,6 +616,48 @@ function Paintings({
         />
       ))}
     </>
+  );
+}
+
+function isFreePlaced(p: Product): boolean {
+  return p.wall != null && p.wallX != null && p.wallY != null && p.wallW != null && p.wallH != null;
+}
+
+function PaintingFree({
+  product, isHovered, onHover,
+}: { product: Product; isHovered: boolean; onHover: (p: Product | null) => void }) {
+  const router = useRouter();
+  const texture = useLoader(THREE.TextureLoader, product.imagePath);
+  const groupRef = useRef<THREE.Group>(null);
+
+  const placed = placementToWorld(product.wall!, product.wallX!, product.wallY!);
+  if (!placed) return null;
+  const w = product.wallW!;
+  const h = product.wallH!;
+
+  useFrame(() => {
+    if (!groupRef.current) return;
+    const target = isHovered ? 1.04 : 1.0;
+    groupRef.current.scale.x += (target - groupRef.current.scale.x) * 0.15;
+    groupRef.current.scale.y += (target - groupRef.current.scale.y) * 0.15;
+  });
+
+  return (
+    <group ref={groupRef} position={placed.position} rotation={placed.rotation}>
+      <mesh position={[0, 0, -0.008]}>
+        <planeGeometry args={[w + 0.12, h + 0.12]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={isHovered ? 1 : 0} toneMapped={false} />
+      </mesh>
+      <mesh
+        onClick={(e) => { e.stopPropagation(); router.push(`/werk/${product.slug}`); }}
+        onPointerOver={(e) => { e.stopPropagation(); onHover(product); document.body.style.cursor = 'pointer'; }}
+        onPointerOut={() => { onHover(null); document.body.style.cursor = ''; }}
+      >
+        <planeGeometry args={[w, h]} />
+        <meshBasicMaterial map={texture} toneMapped={false} />
+      </mesh>
+      <pointLight position={[0, h / 2 + 0.25, 0.4]} intensity={0.4} distance={2.2} color="#fff5e8" />
+    </group>
   );
 }
 

@@ -20,6 +20,11 @@ export async function PATCH(req: Request, { params }: Ctx) {
   if (body.imagePath !== undefined) update.imagePath = body.imagePath;
   if (body.status !== undefined) update.status = body.status;
   if (body.wallSlot !== undefined) update.wallSlot = body.wallSlot;
+  if (body.wall !== undefined) update.wall = body.wall;
+  if (body.wallX !== undefined) update.wallX = body.wallX;
+  if (body.wallY !== undefined) update.wallY = body.wallY;
+  if (body.wallW !== undefined) update.wallW = body.wallW;
+  if (body.wallH !== undefined) update.wallH = body.wallH;
 
   const [updated] = await db
     .update(products)

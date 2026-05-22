@@ -67,6 +67,11 @@ export const DEMO_PAINTINGS: Product[] = PAINTINGS_RAW.map((p, i) => ({
   technique: null,
   status: 'available',
   wallSlot: p.wallSlot,
+  wall: null,
+  wallX: null,
+  wallY: null,
+  wallW: null,
+  wallH: null,
   createdAt: new Date(),
 }));
 
@@ -84,6 +89,11 @@ export const DEMO_CLOTHES: Product[] = CLOTHING_RAW.map((c, i) => ({
   technique: null,
   status: 'available',
   wallSlot: c.wallSlot,
+  wall: null,
+  wallX: null,
+  wallY: null,
+  wallW: null,
+  wallH: null,
   createdAt: new Date(),
 }));
 
